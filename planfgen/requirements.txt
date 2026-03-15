@@ -1,0 +1,8 @@
+shapely>=2.0.0
+networkx>=3.0
+matplotlib>=3.7.0
+streamlit>=1.30.0
+plotly>=5.18.0
+ezdxf>=1.1.0
+# ifcopenshell>=0.7.0  # optional, Sprint 4+ IFC export
+pytest>=7.4.0

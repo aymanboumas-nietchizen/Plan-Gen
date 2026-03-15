@@ -1,0 +1,25 @@
+{
+  "envelope": {"W": 24.0, "H": 18.0},
+  "programme": [
+    {"nom": "Salle 1",         "surface": 60, "couleur": "#4a9eff", "facade": true},
+    {"nom": "Salle 2",         "surface": 60, "couleur": "#3ecf8e", "facade": true},
+    {"nom": "Salle 3",         "surface": 60, "couleur": "#f0a500", "facade": true},
+    {"nom": "Salle 4",         "surface": 60, "couleur": "#f1948a", "facade": true},
+    {"nom": "Administration",  "surface": 30, "couleur": "#c084fc", "facade": true},
+    {"nom": "Infirmerie",      "surface": 15, "couleur": "#fb923c", "facade": true},
+    {"nom": "Couloir principal","surface": 40, "couleur": "#94a3b8", "facade": false},
+    {"nom": "WC Garçons",      "surface": 12, "couleur": "#64748b", "facade": false},
+    {"nom": "WC Filles",       "surface": 12, "couleur": "#e879f9", "facade": false},
+    {"nom": "Local technique",  "surface": 10, "couleur": "#78716c", "facade": false}
+  ],
+  "adjacencies": [
+    ["Salle 1",        "Couloir principal"],
+    ["Salle 2",        "Couloir principal"],
+    ["Salle 3",        "Couloir principal"],
+    ["Salle 4",        "Couloir principal"],
+    ["Administration", "Couloir principal"],
+    ["Infirmerie",     "Couloir principal"],
+    ["WC Garçons",     "Couloir principal"],
+    ["WC Filles",      "Couloir principal"]
+  ]
+}

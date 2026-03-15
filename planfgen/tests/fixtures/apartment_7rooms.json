@@ -1,0 +1,23 @@
+{
+  "envelope": {"W": 12.0, "H": 9.0},
+  "programme": [
+    {"nom": "Séjour",    "surface": 30, "couleur": "#4a9eff", "facade": true},
+    {"nom": "Cuisine",   "surface": 18, "couleur": "#3ecf8e", "facade": true},
+    {"nom": "Chambre 1", "surface": 20, "couleur": "#f0a500", "facade": true},
+    {"nom": "Chambre 2", "surface": 15, "couleur": "#f1948a", "facade": true},
+    {"nom": "SDB",       "surface":  8, "couleur": "#c084fc", "facade": false},
+    {"nom": "WC",        "surface":  5, "couleur": "#fb923c", "facade": false},
+    {"nom": "Couloir",   "surface":  7, "couleur": "#94a3b8", "facade": false}
+  ],
+  "adjacencies": [
+    ["Séjour",    "Cuisine"],
+    ["Séjour",    "Couloir"],
+    ["Cuisine",   "Couloir"],
+    ["Couloir",   "Chambre 1"],
+    ["Couloir",   "Chambre 2"],
+    ["Couloir",   "SDB"],
+    ["Couloir",   "WC"],
+    ["SDB",       "WC"],
+    ["Chambre 1", "SDB"]
+  ]
+}
