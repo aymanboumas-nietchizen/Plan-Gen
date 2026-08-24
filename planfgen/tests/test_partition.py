@@ -284,3 +284,90 @@ def test_aspects_ok_is_false_for_a_tree_forced_into_a_slot():
 def test_aspects_ok_is_true_for_the_reference_plan():
     brief = brief_for(DELIVERABLE)
     assert four_room_tree(structural=False).realise(ENVELOPE, brief, grid()).aspects_ok()
+
+# --- unbalanced trees -------------------------------------------------------
+
+
+def lopsided_tree() -> SlicingTree:
+    """Leaves at depths 3, 3, 2 and 1 — as unbalanced as four rooms get."""
+    return SlicingTree(
+        Cut(
+            Direction.V,
+            False,
+            (
+                Cut(
+                    Direction.H,
+                    False,
+                    (
+                        Leaf("A"),
+                        Cut(Direction.H, False, (Leaf("B"), Leaf("C"))),
+                    ),
+                ),
+                Leaf("D"),
+            ),
+        )
+    )
+
+
+def test_one_pass_drifts_when_the_tree_is_unbalanced():
+    """The failure refinement exists to fix: shallow leaves over, deep under.
+
+    A cut pays for its own wall and divides what is left, but cannot know that
+    one side will spend more on walls below it than the other.
+    """
+    brief = brief_for({"A": 18.0, "B": 15.0, "C": 12.0, "D": 27.72})
+    plan = lopsided_tree().realise(ENVELOPE, brief, grid(), refine=0)
+
+    assert plan.max_area_error(MA_PROFILE) > 0.01
+    errors = plan.area_error(MA_PROFILE)
+    assert errors["D"] > 0 > errors["B"], "the shallow leaf gains what the deep ones lose"
+
+
+def test_refinement_makes_an_unbalanced_tree_exact():
+    brief = brief_for({"A": 18.0, "B": 15.0, "C": 12.0, "D": 27.72})
+    plan = lopsided_tree().realise(ENVELOPE, brief, grid())
+
+    assert plan.max_area_error(MA_PROFILE) < 1e-9
+    assert sum(c.axis_area for c in plan.cells) == pytest.approx(80.0, abs=EXACT)
+
+
+def test_refinement_only_redistributes_it_does_not_invent_area():
+    """When the envelope cannot deliver, every room should be short equally."""
+    brief = brief_for({"A": 25.0, "B": 22.0, "C": 23.0, "D": 20.0})  # 90 vs 72.96
+    plan = four_room_tree(structural=False).realise(ENVELOPE, brief, grid())
+
+    errors = plan.area_error(MA_PROFILE)
+    assert max(errors.values()) - min(errors.values()) < 1e-9
+    assert all(e < 0 for e in errors.values())
+
+
+def test_refinement_leaves_an_unbalanced_shortfall_uniform():
+    brief = brief_for({"A": 20.0, "B": 14.0, "C": 10.0, "D": 28.0})  # 72 vs ~72.7
+    one = lopsided_tree().realise(ENVELOPE, brief, grid(), refine=0)
+    many = lopsided_tree().realise(ENVELOPE, brief, grid())
+
+    def spread(plan):
+        e = plan.area_error(MA_PROFILE)
+        return max(e.values()) - min(e.values())
+
+    assert spread(one) > 0.03
+    assert spread(many) < 1e-9
+    assert many.max_area_error(MA_PROFILE) < one.max_area_error(MA_PROFILE)
+
+
+def test_refinement_never_degrades_a_snapped_plan():
+    """A structural cut is pinned to the grid; refinement must not fight it."""
+    brief = brief_for(DELIVERABLE)
+    one = four_room_tree(structural=True).realise(ENVELOPE, brief, grid(), refine=0)
+    many = four_room_tree(structural=True).realise(ENVELOPE, brief, grid())
+
+    assert many.max_area_error(MA_PROFILE) <= one.max_area_error(MA_PROFILE) + EXACT
+    for cell in many.cells:
+        assert (cell.w, cell.h) == pytest.approx((5.0, 4.0), abs=EXACT)
+
+
+def test_a_balanced_tree_needs_no_refinement():
+    brief = brief_for(DELIVERABLE)
+    one = four_room_tree(structural=False).realise(ENVELOPE, brief, grid(), refine=0)
+    assert one.max_area_error(MA_PROFILE) == pytest.approx(0.0, abs=EXACT)
+

@@ -126,11 +126,26 @@ Decided:  `width_source` is declared after `children`, since a defaulted datacla
           aspects_ok: a corridor has no area target, and at 6.4:1 it would fail an
           aspect gate meant for furnishable rooms. Its declared surface_utile is
           ignored entirely, exactly as ARCHITECTURE section 4 requires.
-Warning:  `realise` is exact only when both sides of a cut have the SAME number of
-          cuts below them. Each cut pays for its own wall then divides what is left,
-          but it cannot know one side will spend more on walls than the other. Balanced
-          trees are exact (0.00%); the 7-room fixture, whose leaves sit at depths 1 and
-          2, drifts to 1.33%. Fixing it needs a bottom-up cost per subtree, not a
-          top-down pass. S9 should prefer balanced trees, or this gets fixed first.
+Warning:  A single pass is exact only on a balanced tree — the 7-room fixture drifted
+          1.33%. FIXED in S5b below; this entry is kept for the record.
+Next:     S6 — bridge L2 to L3, and see a plan
+
+## S5b — fix: exact sizing on unbalanced trees        2026-08-24
+Built:    `realise` now refines. `_pass` is the old single pass; `realise` repeats it
+          against a working demand nudged toward the measured shortfall and keeps the
+          best result. `_targets`, `_spread`, `_nudge` in `partition/tree.py`; 6 tests
+          added to `test_partition.py`.
+Proves:   81 tests pass. The unbalanced 7-room fixture goes 1.3333% -> 0.0156% ->
+          0.000197% -> 0.0000024% over passes 0..3 and reaches 0.0000000000% by the
+          12th. 200 realises in 28 ms, so ~0.14 ms each.
+Decided:  There is no closed form. The net area a subtree delivers depends on how it is
+          split and the split depends on the area; the decomposition W = nw*HT + nh*VT
+          only holds when siblings carry equal wall counts, which is precisely the
+          balanced case. So: iterate, and keep the best pass — refinement can never
+          make a plan worse than the single pass. Working demands are RENORMALISED to
+          the programme total each pass, so refinement only redistributes. A shortfall
+          the envelope cannot cover is uniform and is left alone (spread 4.4e-14 pp);
+          grid-snapped structural cuts are untouched (2.6639% at refine=0 and at 12).
+          `refine=0` still gives the plain single pass.
 Next:     S6 — bridge L2 to L3, and see a plan
 

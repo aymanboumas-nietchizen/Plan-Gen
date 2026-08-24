@@ -38,6 +38,15 @@ MIN_SIDE = 1e-6
 #: A band is always walled in cloisons — it is circulation, never structure.
 BAND_WALL = WallKind.CLOISON
 
+#: How many times `realise` may repeat its pass to even out an unbalanced tree.
+REFINE_PASSES = 12
+
+#: Relative area error at which refinement stops: exact for this purpose.
+REFINE_TOL = 1e-12
+
+#: A working demand is never nudged below this, in m2.
+MIN_DEMAND = 1e-6
+
 
 class Direction(Enum):
     """The orientation of the cut line itself.
@@ -139,29 +148,78 @@ class SlicingTree:
         programme happened to declare for the corridor is ignored here by
         design — see ARCHITECTURE section 4.
         """
+        return self._demand(node, _targets(self, programme))
+
+    def _demand(self, node: Node, demands: dict[str, float]) -> float:
+        """Demand below a node, read from a working dict rather than the brief."""
         if isinstance(node, Leaf):
-            return programme.by_nom(node.nom).surface_utile
-        return sum(self.demand(child, programme) for child in node.children)
+            return demands[node.nom]
+        return sum(self._demand(child, demands) for child in node.children)
 
     def realise(
         self,
         rect: tuple[float, float, float, float],
         brief: Brief,
         grid: StructuralGrid,
+        refine: int = REFINE_PASSES,
     ) -> PartitionPlan:
         """Place every leaf inside `rect`, which is (x, y, w, h) on the axes.
 
         The four outer edges are FACADE; every internal edge takes the kind of
         the cut that made it. Bands are named from the programme's circulation
         rooms, in tree order.
+
+        A single top-down pass cannot be exact on an unbalanced tree. Each cut
+        pays for its own wall and divides what is left, but it cannot know that
+        one side will spend more on walls below it than the other, so shallow
+        leaves come out over and deep leaves under. There is no closed form to
+        reach for: the area a subtree can deliver depends on how it is split,
+        and the split depends on the area — so the pass is repeated against a
+        working demand that is nudged toward the measured shortfall, and the
+        best of the passes is kept. Balanced trees converge on the first pass;
+        `refine=0` gives the plain single pass.
+
+        The working demands are renormalised to the programme's total on every
+        pass, so refinement only ever *redistributes*. When the envelope cannot
+        deliver what was asked, the right answer is the same relative shortfall
+        everywhere, and chasing it room by room would only make it uneven.
         """
+        targets = _targets(self, brief.programme)
+        working = dict(targets)
+        best = current = self._pass(rect, brief, grid, working)
+        best_spread = _spread(current, targets, brief.profile)
+
+        for _ in range(refine):
+            if best_spread <= REFINE_TOL:
+                break
+            nudged = _nudge(working, targets, current, brief.profile)
+            if nudged is None:
+                break
+            working = nudged
+            try:
+                current = self._pass(rect, brief, grid, working)
+            except ValueError:
+                break
+            spread = _spread(current, targets, brief.profile)
+            if spread < best_spread:
+                best, best_spread = current, spread
+        return best
+
+    def _pass(
+        self,
+        rect: tuple[float, float, float, float],
+        brief: Brief,
+        grid: StructuralGrid,
+        demands: dict[str, float],
+    ) -> PartitionPlan:
+        """One top-down placement against a given set of demands."""
         kinds = dict.fromkeys(("left", "right", "bottom", "top"), WallKind.FACADE)
         cells: list[SpaceCell] = []
         names = iter(brief.programme.circulation_rooms)
-        self._place(self.root, rect, kinds, brief, grid, cells, names)
+        self._place(self.root, rect, kinds, brief, grid, cells, names, demands)
         return PartitionPlan(cells=cells, grid=grid, envelope_rect=rect, brief=brief)
 
-    def _place(self, node, rect, kinds, brief, grid, cells, names) -> None:
+    def _place(self, node, rect, kinds, brief, grid, cells, names, demands) -> None:
         x, y, w, h = rect
         if isinstance(node, Leaf):
             cells.append(SpaceCell(node.nom, x, y, w, h, dict(kinds)))
@@ -170,14 +228,15 @@ class SlicingTree:
         profile = brief.profile
         t = {side: profile.thickness_of(kind.value) for side, kind in kinds.items()}
         low, high = node.children
-        d_low = self.demand(low, brief.programme)
-        d_total = d_low + self.demand(high, brief.programme)
+        d_low = self._demand(low, demands)
+        d_total = d_low + self._demand(high, demands)
         if d_total <= 0:
             raise ValueError("a cut whose children demand no area cannot be placed")
         share = d_low / d_total
 
         if isinstance(node, BandCut):
-            self._place_band(node, rect, kinds, t, share, brief, grid, cells, names)
+            self._place_band(node, rect, kinds, t, share, brief, grid, cells,
+                             names, demands)
             return
 
         wall = node.wall_kind
@@ -188,21 +247,21 @@ class SlicingTree:
             offset = free * share + (t["left"] + t_cut) / 2
             offset = self._snapped(node, x, offset, w, grid, "x")
             self._place(low, (x, y, offset, h), {**kinds, "right": wall},
-                        brief, grid, cells, names)
+                        brief, grid, cells, names, demands)
             self._place(high, (x + offset, y, w - offset, h), {**kinds, "left": wall},
-                        brief, grid, cells, names)
+                        brief, grid, cells, names, demands)
         else:
             free = h - (t["bottom"] + t["top"]) / 2 - t_cut
             _require(free, h, t_cut, "rise")
             offset = free * share + (t["bottom"] + t_cut) / 2
             offset = self._snapped(node, y, offset, h, grid, "y")
             self._place(low, (x, y, w, offset), {**kinds, "top": wall},
-                        brief, grid, cells, names)
+                        brief, grid, cells, names, demands)
             self._place(high, (x, y + offset, w, h - offset), {**kinds, "bottom": wall},
-                        brief, grid, cells, names)
+                        brief, grid, cells, names, demands)
 
     def _place_band(
-        self, node, rect, kinds, t, share, brief, grid, cells, names
+        self, node, rect, kinds, t, share, brief, grid, cells, names, demands
     ) -> None:
         """Room, band, room. The band's width is spent before anything is shared."""
         x, y, w, h = rect
@@ -219,7 +278,7 @@ class SlicingTree:
             w_low = free * share + (t["left"] + t_band) / 2
             band_x = x + w_low
             self._place(low, (x, y, w_low, h), {**kinds, "right": BAND_WALL},
-                        brief, grid, cells, names)
+                        brief, grid, cells, names, demands)
             cells.append(
                 SpaceCell(
                     nom, band_x, y, band_axis, h,
@@ -229,14 +288,14 @@ class SlicingTree:
             )
             start = band_x + band_axis
             self._place(high, (start, y, x + w - start, h),
-                        {**kinds, "left": BAND_WALL}, brief, grid, cells, names)
+                        {**kinds, "left": BAND_WALL}, brief, grid, cells, names, demands)
         else:
             free = h - (t["bottom"] + t["top"]) / 2 - 2 * t_band - clear
             _require(free, h, band_axis, "rise")
             h_low = free * share + (t["bottom"] + t_band) / 2
             band_y = y + h_low
             self._place(low, (x, y, w, h_low), {**kinds, "top": BAND_WALL},
-                        brief, grid, cells, names)
+                        brief, grid, cells, names, demands)
             cells.append(
                 SpaceCell(
                     nom, x, band_y, w, band_axis,
@@ -246,7 +305,7 @@ class SlicingTree:
             )
             start = band_y + band_axis
             self._place(high, (x, start, w, y + h - start),
-                        {**kinds, "bottom": BAND_WALL}, brief, grid, cells, names)
+                        {**kinds, "bottom": BAND_WALL}, brief, grid, cells, names, demands)
 
     @staticmethod
     def _snapped(node, start, offset, extent, grid, axis) -> float:
@@ -266,6 +325,51 @@ class SlicingTree:
         if not noms:
             raise ValueError("a slicing tree needs at least one room")
         return cls(root=_balanced(list(noms), random.Random(seed), structural))
+
+
+def _targets(tree: SlicingTree, programme: Programme) -> dict[str, float]:
+    """The net area each leaf is asking for. Bands are not leaves, so not here."""
+    return {leaf.nom: programme.by_nom(leaf.nom).surface_utile for leaf in tree.leaves()}
+
+
+def _spread(plan: PartitionPlan, targets: dict[str, float], profile) -> float:
+    """The worst relative area error over the rooms that have a target."""
+    worst = 0.0
+    for cell in plan.cells:
+        if cell.is_band:
+            continue
+        target = targets[cell.nom]
+        worst = max(worst, abs(cell.net_area(profile) / target - 1.0))
+    return worst
+
+
+def _nudge(
+    working: dict[str, float],
+    targets: dict[str, float],
+    plan: PartitionPlan,
+    profile,
+) -> dict[str, float] | None:
+    """Ask each room for what it was short, then rescale to the original total.
+
+    Rescaling is the point. If the envelope simply cannot deliver what the
+    programme asked for, every room is short by the same fraction and there is
+    nothing to fix; without the rescale the demands would inflate every pass and
+    the shortfall would look worse each time. With it, only the *distribution*
+    moves, which is the part an unbalanced tree actually gets wrong.
+    """
+    delivered = {c.nom: c.net_area(profile) for c in plan.cells if not c.is_band}
+    if any(area <= 0 for area in delivered.values()):
+        return None
+
+    nudged = {
+        nom: max(MIN_DEMAND, value * targets[nom] / delivered[nom])
+        for nom, value in working.items()
+    }
+    total = sum(nudged.values())
+    if total <= 0:
+        return None
+    scale = sum(targets.values()) / total
+    return {nom: value * scale for nom, value in nudged.items()}
 
 
 def _require(free: float, extent: float, consumed: float, run: str) -> None:
