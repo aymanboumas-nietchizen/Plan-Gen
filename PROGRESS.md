@@ -208,3 +208,38 @@ Warning:  `reachable` is clean, but the `adjacency_graph()` it consumes is O(n^2
           but if S9 needs more it should cache adjacency on the FabricPlan.
 Next:     S8 — L1 topology/ typed relations
 
+## S8 — L1 topology/ typed relations                 2026-08-24
+Built:    `topology/{relations,gradient,zoning,plan}.py` and
+          `planfgen/tests/test_topology.py`. `RelationType`, `Relation`,
+          `ProgrammeGraph`, `Zone`, `access_gradient`, `wet_cluster`, `day_night`,
+          `suggest_tree_order`, `TopologyPlan`.
+Proves:   19 tests pass (127 total). The v1 9-pair list loads as 9 CONNECTED relations
+          over all 7 rooms. A SEPARATED WC-Cuisine relation is retrievable and distinct.
+          On the apartment fixture the chambres are PRIVATE and the sejour PUBLIC.
+          suggest_tree_order keeps the wet cluster contiguous and is deterministic.
+          Order comes out: Chambre 1 -> Couloir -> Chambre 2 -> WC -> SDB -> Cuisine ->
+          Sejour -> Entree. Night zone round the corridor, wet block together, then day.
+Bugs:     Two, both found by running it rather than by reading it.
+          (1) `Relation.__post_init__` swapped its fields with
+          `object.__setattr__(self, "a", self.b)` then `..., "b", self.a)` — the second
+          line reads the already-overwritten value, so both fields collapsed to one name
+          and every relation involving an alphabetically-later room ERASED it. Séjour
+          vanished from the graph entirely. Needs a temporary.
+          (2) `_chain` seeded from the MOST connected block. A chain has two ends and
+          starting in the middle wastes one: seeded at the hub of a star, every spoke
+          after the first lands beside a spoke it has nothing to do with. Now seeds from
+          the least connected block and runs through the hub.
+Decided:  Only CONNECTED is walkable for the gradient — an ADJACENT pair shares a wet
+          wall with no door in it. Depth 0-1 PUBLIC, 2 SEMI, 3+ PRIVATE as specified;
+          a room the entry cannot reach is PRIVATE, and its unreachability is L5's
+          finding not L1's. The wet cluster is ordered as one block and expanded after,
+          so contiguity holds by construction rather than by luck. SEPARATED scores -3.0
+          against CONNECTED's +2.0, so a forbidden pair is actively driven apart.
+          day/night/service puts the SDB with the chambres and the WC with service —
+          the conventional French split, and a judgement call.
+Note:     The gradient is only as good as the graph. On the RAW v1 fixture nothing is
+          more than 2 steps in, so the chambres come back SEMI, not PRIVATE. It takes an
+          entrance hall and a corridor hanging off the sejour to get real depth. There
+          is a test pinning both readings.
+Next:     S9 — search/ mutations and annealing
+
