@@ -264,3 +264,53 @@ Warning:  S9 STILL HAS TO CHOOSE. `suggest_tree_order` gives an order over every
           largest declared area becomes the spine, the rest stay leaves.
 Next:     S9 — search/ mutations and annealing
 
+## S9 — search/ mutations and annealing               2026-08-24
+Built:    `evaluate/{constraints,metrics}.py`, `search/{moves,anneal}.py`,
+          `planfgen/tests/test_search.py`. Five gates, four soft scores, five moves,
+          simulated annealing keeping the best 10.
+Proves:   28 tests pass (158 total). anneal is deterministic per seed; 200 iterations
+          run in 0.20 s against the 5 s budget; every move preserves the leaf set and
+          leaves the input tree untouched. THE VARIANCE TEST passes: 50 results over
+          10 seeds give adjacences 6, orientation 5, circulation 5, compacite 5,
+          globale 15 distinct values.
+Numbers:  Best-of-200 on the 12x10 five-room fixture, seed 3, 0.20 s:
+            adjacences  0.8214 -> 0.8929   (9 of 10 relations, CONNECTED needing a door)
+            orientation 0.2000 -> 0.6000
+            circulation 0.9421 -> 0.9423
+            compacite   0.6319 -> 0.6739
+            globale     0.6929 -> 0.8113
+          Max area error 0.036%, circulation coefficient 10.87%, worst room aspect 2.13.
+          v1 scored 0.556 door-capable (5 of 9) on its own fixture at seed 3.
+Decided:  THREE findings, all measured rather than assumed.
+          (1) EXACT SIZING REMOVES CUT POSITION FROM THE SEARCH SPACE. I added a `bias`
+          field to Cut to give `slide_cut` something to slide; the refinement pass
+          absorbs ANY bias exactly — +0.8, +2.5, -3.0 all give back the identical plan.
+          Positions are a consequence of the areas, not a free variable. `bias` was
+          reverted as dead weight. `slide_cut` now toggles `structural`, which is the
+          only thing that genuinely moves a cut: onto the grid, areas absorbing it.
+          (2) `compacite = min(1, 2.5 / ratio)` AS SPECIFIED IS CONSTANT. The aspect gate
+          already guarantees ratio <= 2.5, so it scores exactly 1.0 on every plan that
+          survives — one distinct value over 50 runs, which is precisely how v1 shipped
+          `couverture`. The reference is now a square, so the number can move. The spec
+          and its own variance test contradicted each other; the variance test wins.
+          (3) DIVERSITY COMES FROM SEEDS, NOT FROM LONGER RUNS. 10 runs x 60 iterations
+          gives min 5 distinct per metric; 10 x 200 gives min 3, because a longer run
+          converges harder and returns a narrower best-list.
+          Also: `Scores.globale`, not `global`, which is a keyword. `score(plan, brief,
+          graph=None)` takes the relation graph as a third argument — Brief does not
+          carry one. Gates run cheapest first and only REACHABLE_GATE builds the wall
+          graph, which is cached on the plan for the adjacency metric to reuse.
+          The annealer restarts from the seed with p=0.35 while nothing valid has been
+          found; unbounded drift diverges (0 valid in 200 without it).
+Warning:  THE V1 BRIEF CANNOT BE SEARCHED AT ALL, and the reason is the point of v2.
+          Grown to 12.84 x 9.63 where an exact partition delivers its 103 m2, 5000
+          iterations at a 20% area tolerance found ZERO valid plans — aspect rejected
+          3621 of them. A 5 m2 WC beside a 30 m2 sejour cannot be a slicing-tree leaf
+          without becoming a slot. v1 produced a plan for this brief only because it
+          never measured room shape. The headline numbers above are therefore from the
+          five-room fixture, not from v1's, and the comparison is indicative only.
+          Also: no move CREATES or destroys a band, so the search cannot discover a
+          T-spine. That is the move S10+ will want, and it would likely unlock the v1
+          brief by giving the small wet rooms a second corridor arm to open onto.
+Next:     S10 — L4 services/ shafts, wet walls, R+n hooks
+
