@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "planfgen"
+version = "2.0.0.dev0"
+description = "Space planning engine — architectural floor plans from a programme, a parcel and a regulation profile"
+requires-python = ">=3.12"
+dependencies = [
+    "shapely>=2.0",
+    "networkx>=3.0",
+    "matplotlib>=3.7",
+    "pytest>=7.4",
+]
+
+[tool.setuptools.packages.find]
+include = ["planfgen*"]
+exclude = ["legacy*"]
+
+[tool.pytest.ini_options]
+testpaths = ["planfgen/tests"]
