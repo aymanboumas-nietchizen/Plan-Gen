@@ -43,4 +43,22 @@ Decided:  Bearings run clockwise from +Y as `atan2(x, y)`, minus `north`; the
           lives in the test adapter, not in the library. `min_area`/`min_width`
           hold only the room types v1 stated; the rest carry no minimum.
           `AreaBudget.partition_estimate` is a length in m, not an area.
-Next:     S2 — L1 topology/
+Next:     S2 — L3a fabric/ (PROMPTS.md orders fabric before topology)
+
+## S2 — L3a fabric/ WallAxis and WallGraph            2026-08-24
+Built:    `planfgen/fabric/{axis,graph}.py` and `planfgen/tests/test_fabric_graph.py`.
+          `WallKind`/`WallAxis` with the axis-aligned guard, and `WallGraph` with
+          `split_at_crossings`, `faces`, `bounding_walls`, `wall_between`,
+          `shared_length`. No solidification — that is S3.
+Proves:   16 tests pass (29 in total). The 6.00 x 4.00 grid cut at x=3, y=2 nodes
+          6 authored axes into 12 segments, yields 4 faces of exactly 6.00 m2 with
+          4 bounding walls each, 2.00 m shared horizontally and 0.0 diagonally.
+          The notched 6x4 gives 5 faces of 4.00 m2, 20 m2 total.
+Decided:  Axis endpoints are normalised to p0 <= p1 lexicographically — an axis is
+          undirected and a canonical order keeps splitting deterministic. WallAxis
+          is mutable so L4 can assign `stack_id` in place. `split_at_crossings`
+          drops duplicate segments and is idempotent. `faces()` does NOT auto-node;
+          call `split_at_crossings` first. `shared_length` measures boundary against
+          boundary, so it stays exact when a run spans several split segments.
+          Shapely appears only as polygonize/LineString/Polygon; axis.py is pure float.
+Next:     S3 — L3b fabric/ solidify, Space, FabricPlan
