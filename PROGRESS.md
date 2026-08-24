@@ -62,3 +62,23 @@ Decided:  Axis endpoints are normalised to p0 <= p1 lexicographically — an axi
           boundary, so it stays exact when a run spans several split segments.
           Shapely appears only as polygonize/LineString/Polygon; axis.py is pure float.
 Next:     S3 — L3b fabric/ solidify, Space, FabricPlan
+
+## S3 — L3b fabric/ solidify, Space, FabricPlan       2026-08-24
+Built:    `planfgen/fabric/{solidify,plan}.py` and `planfgen/tests/test_fabric_plan.py`.
+          `net_polygon`, `wall_solids`, `Space`, `FabricPlan`.
+Proves:   10 tests pass (39 total). The closed form of ARCHITECTURE section 2 lands
+          exactly: a 3.00 x 3.00 axis cell is 8.41 m2 behind CLOISON and 7.84 m2
+          behind PORTEUR, both below the 9.00 m2 chambre minimum. A grid cell is
+          2.80 x 1.80 = 5.04 m2 against a 3.00 x 2.00 axis. door_capable is True at
+          2.00 m and False at 0.63 m; the 2x2 grid gives every cell 2 neighbours.
+Decided:  `net_polygon` offsets each edge along its own inward normal and recovers
+          corners by intersecting consecutive offset lines — no Shapely buffer, which
+          would round or mitre them. It reads winding off the face, because polygonize
+          returns CW rings here. Collinear edges of unequal thickness emit a jog rather
+          than being smoothed. `_wall_on_edge` takes the greatest overlap and raises if
+          a face edge has no wall. `wall_solids` rectangles stop at the axis ends, so
+          walls meeting at a corner abut rather than overlap. 7.84 is not exactly
+          representable (2.8*2.8 = 7.839999999999999), so areas assert to abs=1e-9.
+          `exterior_walls` takes a Space, not a nom, unlike the other FabricPlan methods.
+Next:     S4 — L2a partition/ grid, slicing tree, exact sizing
+
