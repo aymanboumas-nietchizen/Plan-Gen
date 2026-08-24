@@ -181,3 +181,30 @@ Note:     A corridor has 6 bounding walls, not 4 — its long sides are cut wher
           clean rectangle. Any code counting bounding walls must not assume 4.
 Next:     S7 — the gates: reachability and furniture fit
 
+## S7 — the gates: reachability and furniture fit    2026-08-24
+Built:    `circulation/reachable.py` (`entry_space`, `reachable`, `ReachabilityReport`),
+          `habitability/{furniture,check}.py` (`FURNITURE`, `fits`, `fit_report`), and
+          `planfgen/tests/test_gates.py`.
+Fixed:    `FabricPlan.exterior_walls` returned NOTHING on any plan built the S6 way.
+          Facade axes sit facade_t/2 inside the parcel outline, so collinear matching
+          found nothing. Added `edge_run` with a slack of half the facade, plus
+          `walls_on_edge` and `edge_length_on`. `entry_space` could not have worked
+          without it.
+Proves:   15 tests pass (108 total). The hand-built L-shaped flat whose chambre has
+          three facade sides reports through_room == {"Chambre": "SDB"} and ok False —
+          the v1 failure of ARCHITECTURE section 1, caught. A stranded cellier touching
+          three rooms over 0.90/0.90/0.80 m is reported unreachable, and the WC beside
+          it as reachable only via the sejour, in the same report. `fits` rejects
+          1.30 x 1.75 against the CHAMBRE spec and accepts 2.50 x 3.10.
+          Timings: fits 0.167 s per 100k calls, fit_report 7.5 us, reachable 256 us.
+Decided:  `entry_space` ranks ENTREE first, then any circulation space (a corridor that
+          meets the street IS the hall), then longest frontage. The entry itself is
+          always passable — the through_room search refuses to cross any OTHER habitable
+          room. `fits` takes an optional profile: a Space knows its net dims, a
+          SpaceCell needs the profile to work them out. Room types absent from FURNITURE
+          carry no requirement, same rule as regulation.py.
+Warning:  `reachable` is clean, but the `adjacency_graph()` it consumes is O(n^2) and
+          does touch Shapely face coordinates. At 256 us it is fine for 200 variants,
+          but if S9 needs more it should cache adjacency on the FabricPlan.
+Next:     S8 — L1 topology/ typed relations
+
