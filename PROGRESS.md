@@ -149,3 +149,35 @@ Decided:  There is no closed form. The net area a subtree delivers depends on ho
           `refine=0` still gives the plain single pass.
 Next:     S6 — bridge L2 to L3, and see a plan
 
+## S6 — bridge L2 to L3, and the first real plan     2026-08-24
+Built:    `partition/bridge.py` with `wall_axes`, `to_wall_graph`, `to_fabric`, wired
+          onto `PartitionPlan`; `document/preview.py` with `to_svg` (pure string
+          building, no matplotlib); `planfgen/tests/test_bridge.py`.
+Proves:   12 tests pass (93 total). Round trip Space.surface_utile vs
+          SpaceCell.net_area is exact to 3.5e-13 (asked: 1e-6). No duplicated axes
+          before or after split_at_crossings. Every rectangular room has 4 bounding
+          walls. `to_svg` writes one fill per space plus stamps, scale bar, north arrow.
+Ran it:   5-space apartment, 11.00 x 8.00, spine corridor -> outputs/preview.svg.
+          Sejour 26.00 -> 26.0000, Cuisine 12.00 -> 12.0000, Chambre 19.00 -> 19.0000,
+          SDB 8.70 -> 8.7000. Max area error 0.0000000000%. Corridor clear 1.200000 m,
+          circulation 11.91%, total net 74.58 m2, 16 axes, aspects ok.
+          Every room opens onto the corridor — the v1 "enter the bedroom through the
+          bathroom" failure of ARCHITECTURE section 1 does not occur.
+Decided:  THE ENVELOPE RECT IS THE PARCEL OUTLINE INSET BY facade_t/2, not the outline
+          itself. Only then do the facade solids land inside the boundary AND does L2
+          reconcile with L0: 11x8 inset 0.15 is 10.70 x 7.70, whose net is 10.40 x 7.40
+          = 76.96 m2, the same interior check_feasibility erodes to. On this plan L0
+          estimated 74.41 m2 habitable against 74.58 delivered — 0.23% conservative,
+          exactly as ARCHITECTURE section 3 claims. Realising on the raw outline instead
+          inflates every room by 3.33%.
+          `wall_axes` groups cell edges by the line they sit on and cuts at every
+          endpoint in the group, so a long edge facing two short ones becomes the same
+          pieces either way. Outer runs therefore come back subdivided (10 facade axes,
+          not 4) and the graph is pre-noded along each line.
+          The preview owns its palette, keyed by RoomType — a Space is derived from the
+          wall graph and has no business carrying a swatch.
+Note:     A corridor has 6 bounding walls, not 4 — its long sides are cut where the
+          rooms either side meet them. Still 4 distinct lines, so the net polygon is a
+          clean rectangle. Any code counting bounding walls must not assume 4.
+Next:     S7 — the gates: reachability and furniture fit
+

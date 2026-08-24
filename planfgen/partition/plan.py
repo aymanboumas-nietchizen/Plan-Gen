@@ -125,3 +125,23 @@ class PartitionPlan:
     def total_net(self, profile: RegulationProfile) -> float:
         """Sum of the net areas the tiling actually delivers, in m²."""
         return sum(cell.net_area(profile) for cell in self.cells)
+
+    def to_wall_graph(self, profile: RegulationProfile):
+        """Author this tiling's cut lines as a `WallGraph`.
+
+        An edge shared by two cells becomes one axis, and where the two cells
+        disagree about its kind the thicker wall wins.
+        """
+        from planfgen.partition.bridge import to_wall_graph
+
+        return to_wall_graph(self, profile)
+
+    def to_fabric(self, profile: RegulationProfile):
+        """Cross into L3: node the graph and read the spaces back out as faces.
+
+        This is where the rooms stop being authored. What comes back is derived
+        from the walls, and its net areas are measured, not promised.
+        """
+        from planfgen.partition.bridge import to_fabric
+
+        return to_fabric(self, profile)

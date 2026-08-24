@@ -4,6 +4,7 @@ The structural grid, binary cuts, the ternary band cut, the net/gross
 inversion and `PartitionPlan`.
 """
 
+from planfgen.partition.bridge import to_fabric, to_wall_graph
 from planfgen.partition.grid import StructuralGrid
 from planfgen.partition.plan import PartitionPlan, SpaceCell
 from planfgen.partition.sizing import aspect_ok, axis_dims
@@ -28,4 +29,6 @@ __all__ = [
     "StructuralGrid",
     "aspect_ok",
     "axis_dims",
+    "to_fabric",
+    "to_wall_graph",
 ]
