@@ -82,3 +82,30 @@ Decided:  `net_polygon` offsets each edge along its own inward normal and recove
           `exterior_walls` takes a Space, not a nom, unlike the other FabricPlan methods.
 Next:     S4 — L2a partition/ grid, slicing tree, exact sizing
 
+## S4 — L2a partition/ grid, tree, exact sizing       2026-08-24
+Built:    `planfgen/partition/{grid,sizing,tree,plan}.py` and
+          `planfgen/tests/test_partition.py`. Binary cuts only — no band cut.
+Proves:   19 tests pass (58 total). `axis_dims` round-trips to 3.6e-15 over 20 random
+          (area, aspect) pairs. On a 10.00 x 8.00 envelope a 4-room tree with free cuts
+          delivers every room its target net area EXACTLY (0.000%, not merely <0.5%),
+          and stays exact however uneven the programme. The same tree with structural
+          cuts snaps to the 5.00 x 4.00 grid and lands at 2.66% max error. Cells tile
+          the envelope to 80.000000000 with no gap or overlap. A 7.2:1 slot fails
+          aspects_ok.
+Decided:  A cut splits **net** area, not axis area: it removes its own wall thickness
+          from the run first, then divides what is left in proportion to demand. That
+          is what makes leaves exact — the uniform factor is (deliverable / demanded),
+          so if the programme asks for what the envelope can give, every room is exact
+          regardless of tree depth or skew. Direction.V is a vertical cut LINE (splits
+          left|right); children[0] is always the low side. `from_span` takes
+          n = ceil(span / max_span) bays so the module divides the span exactly and no
+          ragged bay is left. `_snapped` refuses a snap that would erase a side.
+          `from_sequence` gained a `structural` kwarg the spec did not name — the tests
+          need the same tree both ways.
+Warning:  A coarse structural grid cannot represent an uneven programme. On this 10x8
+          envelope the only interior grid lines are x=5 and y=4, so every structural
+          cell is forced to 5.00 x 4.00. Near-equal rooms land at 2.66%; a programme of
+          24/14/20/14.96 lands at 27.2%. S9's search must treat `structural` as a real
+          cost, not a free flag.
+Next:     S5 — L2b partition/ the band cut
+
