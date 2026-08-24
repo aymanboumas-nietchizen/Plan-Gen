@@ -215,8 +215,19 @@ class SlicingTree:
         """One top-down placement against a given set of demands."""
         kinds = dict.fromkeys(("left", "right", "bottom", "top"), WallKind.FACADE)
         cells: list[SpaceCell] = []
-        names = iter(brief.programme.circulation_rooms)
+        # A circulation room already standing as a leaf is a room, not a spine,
+        # and is not available to name a band. Taking it anyway would place the
+        # same nom twice.
+        leaf_noms = {leaf.nom for leaf in self.leaves()}
+        names = iter(
+            [
+                room
+                for room in brief.programme.circulation_rooms
+                if room.nom not in leaf_noms
+            ]
+        )
         self._place(self.root, rect, kinds, brief, grid, cells, names, demands)
+        _no_duplicates(cells)
         return PartitionPlan(cells=cells, grid=grid, envelope_rect=rect, brief=brief)
 
     def _place(self, node, rect, kinds, brief, grid, cells, names, demands) -> None:
@@ -381,14 +392,35 @@ def _require(free: float, extent: float, consumed: float, run: str) -> None:
 
 
 def _next_band_nom(names: Iterator[RoomSpec]) -> str:
-    """Bands are named from the programme's circulation rooms, in tree order."""
+    """Bands are named from the programme's circulation rooms, in tree order.
+
+    Circulation rooms already placed as leaves are not in the pool — see
+    `realise`. A tree may therefore run out of names even when the programme
+    looks like it has enough.
+    """
     room = next(names, None)
     if room is None:
         raise ValueError(
-            "the tree has more bands than the programme has circulation rooms; "
-            "add a COULOIR or ENTREE for each one"
+            "the tree has more bands than it has spare circulation rooms to name "
+            "them; add a COULOIR or ENTREE per band, and note that a circulation "
+            "room standing as a Leaf is not available to name one"
         )
     return room.nom
+
+
+def _no_duplicates(cells: list[SpaceCell]) -> None:
+    """No room may be placed twice. Caught here, not three layers downstream."""
+    seen: set[str] = set()
+    twice: set[str] = set()
+    for placed in cells:
+        if placed.nom in seen:
+            twice.add(placed.nom)
+        seen.add(placed.nom)
+    if twice:
+        raise ValueError(
+            f"placed more than once: {', '.join(sorted(twice))}; a room is either a "
+            f"leaf or a band, never both"
+        )
 
 
 def _collect(node: Node, out: list[Leaf]) -> None:

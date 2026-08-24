@@ -243,3 +243,24 @@ Note:     The gradient is only as good as the graph. On the RAW v1 fixture nothi
           is a test pinning both readings.
 Next:     S9 — search/ mutations and annealing
 
+## S8b — fix: a room is a leaf or a band, never both  2026-08-24
+Built:    `realise` now excludes circulation rooms already standing as leaves from the
+          band-name pool, and `_no_duplicates` rejects any nom placed twice. 3 tests
+          added to `test_band_cut.py`.
+Found by: composing L1 with L2 rather than reading either. `suggest_tree_order` returns
+          ALL rooms including Couloir and Entree; `SlicingTree.from_sequence` turns every
+          nom into a Leaf. Feed one into the other and a tree that also has a BandCut
+          produced TWO cells named Couloir — one leaf, one band. The failure surfaced
+          three layers later as `to_fabric: cell 'Couloir' matched more than one face`,
+          which does not name the cause.
+Proves:   130 tests pass. An Entree as a leaf beside a Couloir band now works and both
+          appear in circulation_cells, with only the band excluded from area_error.
+          A programme whose ONLY circulation room is already a leaf raises at realise
+          with a message saying why. A tree naming the same room twice raises.
+Warning:  S9 STILL HAS TO CHOOSE. `suggest_tree_order` gives an order over every room;
+          nothing yet decides which of them become bands rather than leaves. The fixes
+          only mean the wrong choice fails loudly at the source instead of silently
+          producing a duplicate. A sensible default: the circulation room with the
+          largest declared area becomes the spine, the rest stay leaves.
+Next:     S9 — search/ mutations and annealing
+

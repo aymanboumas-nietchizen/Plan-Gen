@@ -322,3 +322,74 @@ def test_the_t_spine_still_tiles_exactly():
     assert len(plan.cells) == 5
     assert sum(c.axis_area for c in plan.cells) == pytest.approx(120.0, abs=EXACT)
     assert tiled_area(plan) == pytest.approx(120.0, abs=EXACT)
+
+
+# --- a room is a leaf or a band, never both ---------------------------------
+
+
+def test_a_circulation_room_standing_as_a_leaf_does_not_also_name_a_band():
+    """An entree that is a room is a room. The band takes the other one."""
+    brief = brief_for(
+        [
+            ("Sejour", RoomType.SEJOUR, 26.0),
+            ("Chambre", RoomType.CHAMBRE, 16.0),
+            ("SDB", RoomType.SDB, 9.0),
+            ("Entree", RoomType.ENTREE, 6.0),
+            ("Couloir", RoomType.COULOIR, 7.0),
+        ],
+        12.0,
+        9.0,
+    )
+    tree = SlicingTree(
+        BandCut(
+            Direction.V,
+            (
+                Cut(Direction.H, False, (Leaf("Sejour"), Leaf("Entree"))),
+                Cut(Direction.H, False, (Leaf("Chambre"), Leaf("SDB"))),
+            ),
+        )
+    )
+    plan = tree.realise((0.0, 0.0, 12.0, 9.0), brief, StructuralGrid.from_span(12, 9))
+
+    assert [c.nom for c in plan.cells if c.is_band] == ["Couloir"]
+    assert sorted(c.nom for c in plan.cells) == sorted(
+        ["Sejour", "Entree", "Couloir", "Chambre", "SDB"]
+    )
+    # The entree is circulation, but as a leaf it has a real area target.
+    assert [c.nom for c in plan.circulation_cells] == ["Entree", "Couloir"]
+    assert "Entree" in plan.area_error(P)
+    assert "Couloir" not in plan.area_error(P)
+
+
+def test_the_only_circulation_room_cannot_be_both_a_leaf_and_a_band():
+    """The failure S9 would otherwise meet as a duplicated cell three layers on."""
+    brief = brief_for(
+        [
+            ("Sejour", RoomType.SEJOUR, 26.0),
+            ("Chambre", RoomType.CHAMBRE, 16.0),
+            ("Couloir", RoomType.COULOIR, 7.0),
+        ],
+        12.0,
+        9.0,
+    )
+    tree = SlicingTree(
+        BandCut(Direction.V, (Leaf("Sejour"), Cut(Direction.H, False,
+                (Leaf("Chambre"), Leaf("Couloir")))))
+    )
+    with pytest.raises(ValueError, match="spare circulation rooms"):
+        tree.realise((0.0, 0.0, 12.0, 9.0), brief, StructuralGrid.from_span(12, 9))
+
+
+def test_the_same_room_cannot_be_placed_twice():
+    brief = brief_for(
+        [
+            ("Sejour", RoomType.SEJOUR, 26.0),
+            ("Chambre", RoomType.CHAMBRE, 16.0),
+        ],
+        12.0,
+        9.0,
+    )
+    tree = SlicingTree(Cut(Direction.V, False, (Leaf("Chambre"), Leaf("Chambre"))))
+    with pytest.raises(ValueError, match="placed more than once"):
+        tree.realise((0.0, 0.0, 12.0, 9.0), brief, StructuralGrid.from_span(12, 9))
+
