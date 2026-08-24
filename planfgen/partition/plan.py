@@ -30,6 +30,10 @@ class SpaceCell:
     w: float
     h: float
     wall_kinds: dict[str, WallKind]
+    #: True if this cell is a circulation band. Its area is an output of the
+    #: partition, not something the programme asked for, so the area gates
+    #: skip it — see ARCHITECTURE section 4.
+    is_band: bool = False
 
     @property
     def axis_area(self) -> float:
@@ -60,18 +64,58 @@ class PartitionPlan:
     brief: Brief
 
     def aspects_ok(self, max_ratio: float = 2.5) -> bool:
-        """True if no room is too elongated to furnish, measured on net dims."""
+        """True if no room is too elongated to furnish, measured on net dims.
+
+        Bands are exempt. A corridor is supposed to be long and thin, and it is
+        never furnished, so judging it by a room's aspect ratio would fail every
+        plan that has one. What governs a band is its clear width.
+        """
         profile = self.brief.profile
-        return all(aspect_ok(*cell.net_dims(profile), max_ratio) for cell in self.cells)
+        return all(
+            aspect_ok(*cell.net_dims(profile), max_ratio)
+            for cell in self.cells
+            if not cell.is_band
+        )
 
     def area_error(self, profile: RegulationProfile) -> dict[str, float]:
-        """Signed relative error per room: positive means the cell is too big."""
+        """Signed relative error per room: positive means the cell is too big.
+
+        Bands are left out. A corridor gets a width, never an area, so there is
+        no target to be in error against — measure it with
+        `circulation_coefficient` instead.
+        """
         programme = self.brief.programme
         return {
             cell.nom: cell.net_area(profile) / programme.by_nom(cell.nom).surface_utile
             - 1.0
             for cell in self.cells
+            if not cell.is_band
         }
+
+    @property
+    def circulation_cells(self) -> list[SpaceCell]:
+        """The cells the programme types as circulation."""
+        programme = self.brief.programme
+        return [
+            cell
+            for cell in self.cells
+            if programme.by_nom(cell.nom).kind.is_circulation
+        ]
+
+    def circulation_coefficient(self, profile: RegulationProfile) -> float:
+        """Circulation net area over total net area.
+
+        This is the number `"Couloir": {"surface": 7}` was trying and failing to
+        control. It is a result, read off the finished tiling.
+        """
+        total = self.total_net(profile)
+        if total <= 0:
+            return 0.0
+        return sum(c.net_area(profile) for c in self.circulation_cells) / total
+
+    def band_clear_width(self, cell: SpaceCell, profile: RegulationProfile) -> float:
+        """The narrow net dimension of a band — what someone walks through."""
+        return min(cell.net_dims(profile))
 
     def max_area_error(self, profile: RegulationProfile) -> float:
         """The worst absolute relative error over all rooms."""

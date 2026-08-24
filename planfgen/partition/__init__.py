@@ -1,15 +1,23 @@
 """L2 — `partition/`: the slicing tree, and the exact tiling it realises.
 
-L2a, in place: the structural grid, binary cuts, the net/gross inversion and
-`PartitionPlan`. The band cut is L2b and does not exist yet.
+The structural grid, binary cuts, the ternary band cut, the net/gross
+inversion and `PartitionPlan`.
 """
 
 from planfgen.partition.grid import StructuralGrid
 from planfgen.partition.plan import PartitionPlan, SpaceCell
 from planfgen.partition.sizing import aspect_ok, axis_dims
-from planfgen.partition.tree import Cut, Direction, Leaf, Node, SlicingTree
+from planfgen.partition.tree import (
+    BandCut,
+    Cut,
+    Direction,
+    Leaf,
+    Node,
+    SlicingTree,
+)
 
 __all__ = [
+    "BandCut",
     "Cut",
     "Direction",
     "Leaf",

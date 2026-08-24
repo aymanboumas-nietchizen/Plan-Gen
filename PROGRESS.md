@@ -109,3 +109,28 @@ Warning:  A coarse structural grid cannot represent an uneven programme. On this
           cost, not a free flag.
 Next:     S5 — L2b partition/ the band cut
 
+## S5 — L2b partition/ the band cut                   2026-08-24
+Built:    `BandCut` in `partition/tree.py`; `circulation_cells`,
+          `circulation_coefficient`, `band_clear_width` and `SpaceCell.is_band` in
+          `partition/plan.py`; `planfgen/tests/test_band_cut.py`. Nothing outside
+          `partition/` was touched.
+Proves:   17 tests pass (75 total). A band on a 10.00 x 8.00 rect has clear width
+          exactly 1.20 in both H and V (axis 1.30 = clear + one cloison); flanking
+          rooms stay within 0.5%; the three cells tile to 80.000000000. A 7-room
+          spine plan gives circulation coefficient 0.117. A nested BandCut (T-spine)
+          gives two corridors sharing a 1.30 m run, both still 1.20 clear.
+Decided:  `width_source` is declared after `children`, since a defaulted dataclass
+          field cannot precede one without a default. Bands are named from the
+          programme's circulation rooms in tree order, and a tree with more bands than
+          circulation rooms raises. Bands are excluded from BOTH area_error and
+          aspects_ok: a corridor has no area target, and at 6.4:1 it would fail an
+          aspect gate meant for furnishable rooms. Its declared surface_utile is
+          ignored entirely, exactly as ARCHITECTURE section 4 requires.
+Warning:  `realise` is exact only when both sides of a cut have the SAME number of
+          cuts below them. Each cut pays for its own wall then divides what is left,
+          but it cannot know one side will spend more on walls than the other. Balanced
+          trees are exact (0.00%); the 7-room fixture, whose leaves sit at depths 1 and
+          2, drifts to 1.33%. Fixing it needs a bottom-up cost per subtree, not a
+          top-down pass. S9 should prefer balanced trees, or this gets fixed first.
+Next:     S6 — bridge L2 to L3, and see a plan
+
