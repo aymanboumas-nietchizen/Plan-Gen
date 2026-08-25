@@ -6,3 +6,6 @@ __pycache__/
 .pytest_cache/
 outputs/
 planfgen-v2-kit/
+
+# personal, per-machine Claude Code settings (Remote Control, etc.)
+.claude/settings.local.json
