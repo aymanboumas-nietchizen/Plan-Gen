@@ -30,6 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Protocol
 
+from planfgen.brief.footprint import Footprint
 from planfgen.brief.plan import Brief
 from planfgen.circulation.reachable import reachable
 from planfgen.circulation.shape import circulation_runs
@@ -39,6 +40,13 @@ from planfgen.habitability.check import fit_report
 #: fraction. Free cuts are exact, so this slack exists for structural ones,
 #: where the grid moves the cut and the areas either side absorb it.
 AREA_TOLERANCE = 0.05
+
+#: Slack on the coverage comparison. A brief with no footprint builds on the
+#: whole bounding box, which is a coverage of exactly 1.0 on a rectangular
+#: parcel — and exactly 1.0 is the sort of number floating point misses by an
+#: ulp. Without this the default profile would refuse every plan it has ever
+#: passed.
+COVERAGE_TOLERANCE = 1e-9
 
 
 class Gate(Protocol):
@@ -106,6 +114,27 @@ def _minima_ok(plan, brief: Brief) -> bool:
     return True
 
 
+def _coverage_ok(plan, brief: Brief) -> bool:
+    """Built area over parcel area, against the profile's CES.
+
+    CLAUDE.md lists coverage among the gates and it has never existed, for a
+    reason that was structural rather than an oversight: until S14 the footprint
+    *was* the parcel, so coverage was 1.0 by construction and a gate on it could
+    only ever refuse or pass everything at once. Now that a footprint is chosen
+    the question means something.
+
+    Measured from the plan rather than from the brief, so a hand-built
+    `PartitionPlan` is judged on what it actually covers. The parcel polygon is
+    the denominator, not its bounding box — a footprint spilling into the notch
+    of an L reports more than 1, which is exactly the fault to catch.
+    """
+    footprint = Footprint.from_envelope(plan.envelope_rect, brief.profile)
+    return (
+        footprint.coverage(brief.parcel)
+        <= brief.profile.coverage_max + COVERAGE_TOLERANCE
+    )
+
+
 def _circulation_ok(plan, brief: Brief) -> bool:
     """No corridor may run past its last door by more than its own width.
 
@@ -130,6 +159,7 @@ def _reachable_ok(plan, brief: Brief) -> bool:
 
 
 AREA_GATE = _Gate("area", _areas_ok)
+COVERAGE_GATE = _Gate("coverage", _coverage_ok)
 ASPECT_GATE = _Gate("aspect", _aspects_ok)
 FURNITURE_GATE = _Gate("furniture", _furniture_ok)
 MIN_AREA_GATE = _Gate("min_area", _minima_ok)
@@ -144,6 +174,7 @@ REACHABLE_GATE = _Gate("reachable", _reachable_ok)
 #: search uses it and `all_gates` does not run it.
 GATES: tuple[Gate, ...] = (
     AREA_GATE,
+    COVERAGE_GATE,
     MIN_AREA_GATE,
     FURNITURE_GATE,
     CIRCULATION_GATE,

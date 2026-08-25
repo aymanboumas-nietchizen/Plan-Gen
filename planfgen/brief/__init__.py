@@ -9,6 +9,15 @@ from planfgen.brief.feasibility import (
     check_feasibility,
     estimate_partition_length,
 )
+from planfgen.brief.footprint import (
+    Footprint,
+    delivered,
+    fit_brief,
+    fit_footprint,
+    fit_programme,
+    scale_for,
+    sized_demand,
+)
 from planfgen.brief.parcel import EdgeSpec, EdgeType, Parcel
 from planfgen.brief.plan import Brief, InfeasibleBrief
 from planfgen.brief.programme import Orientation, Programme, RoomSpec, RoomType
@@ -19,6 +28,7 @@ __all__ = [
     "Brief",
     "EdgeSpec",
     "EdgeType",
+    "Footprint",
     "InfeasibleBrief",
     "MA_PROFILE",
     "Orientation",
@@ -28,5 +38,11 @@ __all__ = [
     "RoomSpec",
     "RoomType",
     "check_feasibility",
+    "delivered",
     "estimate_partition_length",
+    "fit_brief",
+    "fit_footprint",
+    "fit_programme",
+    "scale_for",
+    "sized_demand",
 ]

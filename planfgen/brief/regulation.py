@@ -48,6 +48,14 @@ class RegulationProfile:
     Room types absent from `min_area` or `min_width` simply carry no minimum —
     v1 stated none for them, and inventing one here would be a regulation
     invented in code.
+
+    `coverage_max` is the CES, the emprise au sol: built area over parcel area.
+    It is 1.0 in every profile below, including the two sourced ones, and that
+    is not an oversight. **Neither the décret nor the Casablanca arrêté states a
+    CES.** Both are building-form texts — gabarit, alignement, saillies, hauteur
+    — and the coverage ratio comes from the zone's plan d'aménagement, which is
+    a per-project document rather than a national rule. So it is a value the
+    caller supplies, and 1.0 means "unconstrained until someone does".
     """
 
     facade_t: float = 0.30
@@ -62,6 +70,7 @@ class RegulationProfile:
     daylight_ratio: float = 0.125
     allege_h: float = 1.00
     head_h: float = 2.20
+    coverage_max: float = 1.0
     min_area: dict[RoomType, float] = field(default_factory=lambda: dict(_MIN_AREA))
     min_width: dict[RoomType, float] = field(default_factory=lambda: dict(_MIN_WIDTH))
 

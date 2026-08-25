@@ -684,3 +684,31 @@ Checked:  neither the décret nor the Casablanca arrêté states a CES/emprise �
           superstructure rule, not a footprint setback. Both recorded so neither gets
           invented later; setback belongs on `EdgeSpec`, not on the profile.
 Next:     S14. CLAUDE.md names coverage among the gates and it has never existed.
+
+---
+
+## S14 — The footprint
+
+Built:    `brief/footprint.py` — `Footprint`, `sized_demand`, `fit_footprint` (secant on
+          gross area), `fit_programme`, `fit_brief`. `Brief` gains an optional footprint;
+          `envelope_of` and `grid_for` read it. `coverage_max` on the profile and
+          `COVERAGE_GATE` in GATES — CLAUDE.md named coverage a gate and it never existed.
+Result:   AN UNCALIBRATED BRIEF NOW GENERATES. Round-number programme on three parcels:
+          raw 0 plans in 400 (area gate, 400/400); fitted 10 plans, best 0.859-0.947.
+          Area error 32%/114%/243% -> 0.000000%. The solve is 5 realises, ~2 ms.
+Scope:    Had to touch L3, which the prompt did not name, and it was the real find.
+          `FabricPlan._slack` was `facade_t / 2` — the offset a facade axis has when the
+          building IS the parcel. Set it back 0.2 mm and every wall stops matching its
+          edge: no orientation, no windows, no frontage on the entry, nothing reachable.
+          Measured: the calibrated fixture went from 10 valid plans to 0. The slack is now
+          measured from `envelope_rect` per edge, identical when the building fills its
+          parcel. Without this S14 would have shipped a feature that silently found none.
+Also:     `fit_brief` pushes the solved footprint against the entry edge — a building
+          centred in its parcel has no street frontage. Full placement is S15.
+          Wrong-shape and too-small are separated: the first is a ValueError naming the
+          parcel's own aspect, the second an InfeasibleBrief carrying the deficit.
+Note:     CLAUDE.md documents `python -m planfgen.main`. There is no main module; S13
+          built the studio and the Grasshopper bridge instead. Nothing to wire `fit_brief`
+          into but the studio, which S15 or a later session should do.
+Next:     S15 — where the footprint sits: flush to MITOYEN, `setback` on `EdgeSpec`,
+          and `slide_footprint` / `shape_footprint` as moves.

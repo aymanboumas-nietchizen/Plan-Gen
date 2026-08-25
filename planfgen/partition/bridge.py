@@ -117,7 +117,11 @@ def to_fabric(plan, profile: RegulationProfile) -> FabricPlan:
         raise ValueError(f"no face was found for {sorted(missing)}")
 
     return FabricPlan(
-        graph=graph, spaces=spaces, parcel=plan.brief.parcel, profile=profile
+        graph=graph,
+        spaces=spaces,
+        parcel=plan.brief.parcel,
+        profile=profile,
+        envelope_rect=plan.envelope_rect,
     )
 
 

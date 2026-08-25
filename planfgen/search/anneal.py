@@ -17,6 +17,7 @@ import math
 import random
 from dataclasses import dataclass, field
 
+from planfgen.brief.footprint import Footprint
 from planfgen.brief.plan import Brief
 from planfgen.evaluate.constraints import all_gates
 from planfgen.evaluate.metrics import Scores, score
@@ -71,19 +72,34 @@ class RunStats:
 
 
 def envelope_of(brief: Brief) -> tuple[float, float, float, float]:
-    """The rect a tree is realised on: the parcel inset by half the facade.
+    """The rect a tree is realised on: the footprint inset by half the facade.
 
-    That inset is what puts the facade *solids* inside the boundary and what
+    That inset is what puts the facade *solids* inside the built extent and what
     makes L2's net areas reconcile with L0's feasibility interior.
+
+    A brief with no footprint builds on the whole parcel, which was the only
+    behaviour before S14 and is still what every brief that has not been through
+    `fit_brief` gets. `Footprint.of_parcel` is that bounding box, so the two
+    branches are the same arithmetic and not two definitions of an envelope.
     """
-    inset = brief.profile.facade_t / 2
-    minx, miny, maxx, maxy = brief.parcel.outline.bounds
-    return (minx + inset, miny + inset, (maxx - minx) - 2 * inset, (maxy - miny) - 2 * inset)
+    return _footprint_of(brief).envelope_rect(brief.profile)
 
 
 def grid_for(brief: Brief) -> StructuralGrid:
-    minx, miny, maxx, maxy = brief.parcel.outline.bounds
-    return StructuralGrid.from_span(maxx - minx, maxy - miny, origin=(minx, miny))
+    """The structural grid the bearing walls may sit on.
+
+    Aligned to the footprint, not to the parcel: a grid whose origin is a
+    boundary the building does not touch would snap structural cuts to lines
+    that mean nothing on site.
+    """
+    footprint = _footprint_of(brief)
+    return StructuralGrid.from_span(
+        footprint.w, footprint.h, origin=(footprint.x, footprint.y)
+    )
+
+
+def _footprint_of(brief: Brief) -> Footprint:
+    return brief.footprint or Footprint.of_parcel(brief.parcel)
 
 
 def evaluate(

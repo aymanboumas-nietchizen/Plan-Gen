@@ -94,6 +94,7 @@ class FabricPlan:
     spaces: dict[str, Space]
     parcel: Parcel
     profile: RegulationProfile
+    envelope_rect: tuple[float, float, float, float] | None = None
 
     def shared_wall_length(self, a: str, b: str) -> float:
         """Metres of wall two spaces hold in common."""
@@ -121,10 +122,38 @@ class FabricPlan:
         """Sum of the net areas actually delivered, in m²."""
         return sum(space.surface_utile for space in self.spaces.values())
 
-    @property
-    def _slack(self) -> float:
-        """How far a facade axis may sit inside the boundary and still be on it."""
-        return self.profile.facade_t / 2 + BOUND_TOL
+    def _slack_on(self, edge: int) -> float:
+        """How far a facade axis may sit inside parcel edge `edge` and still
+        count as being on it.
+
+        A facade axis is a centreline, so it always sits at least half a wall
+        inside the boundary. Until S14 that was the *whole* story, because the
+        building was the parcel and `facade_t / 2` was exactly the offset — so
+        this was a constant.
+
+        A footprint smaller than its parcel breaks that. Set the building back
+        by a millimetre and every facade axis falls outside a slack of
+        `facade_t / 2 + 1e-6`: no room matches any edge, so none gets an
+        orientation, none may carry a window, and the entry edge has no
+        frontage, which makes the plan unreachable. Measured: a footprint 0.2 mm
+        inside its parcel took a search from ten valid plans to none.
+
+        So the slack is measured rather than assumed — it is the distance from
+        the parcel edge to the parallel side of the built envelope, which is
+        where the axes actually are. With no envelope recorded, or a building
+        that fills its parcel, it is `facade_t / 2` again and nothing moves.
+        """
+        base = self.profile.facade_t / 2 + BOUND_TOL
+        if self.envelope_rect is None:
+            return base
+        coords = list(self.parcel.outline.exterior.coords)
+        (x0, y0), (x1, y1) = coords[edge], coords[edge + 1]
+        x, y, w, h = self.envelope_rect
+        if abs(y1 - y0) <= TOL:                      # horizontal parcel edge
+            return min(abs(y - y0), abs(y + h - y0)) + BOUND_TOL
+        if abs(x1 - x0) <= TOL:                      # vertical parcel edge
+            return min(abs(x - x0), abs(x + w - x0)) + BOUND_TOL
+        return base
 
     def walls_on_edge(self, space: Space, edge: int) -> list[WallAxis]:
         """The space's walls running along one numbered edge of the parcel.
@@ -138,14 +167,16 @@ class FabricPlan:
         return [
             wall
             for wall in space.bounding
-            if edge_run(wall, a, b, self._slack) > BOUND_TOL
+            if edge_run(wall, a, b, self._slack_on(edge)) > BOUND_TOL
         ]
 
     def edge_length_on(self, space: Space, edge: int) -> float:
         """Metres this space presents to one edge of the parcel."""
         coords = list(self.parcel.outline.exterior.coords)
         a, b = coords[edge], coords[edge + 1]
-        return sum(edge_run(wall, a, b, self._slack) for wall in space.bounding)
+        return sum(
+            edge_run(wall, a, b, self._slack_on(edge)) for wall in space.bounding
+        )
 
     def exterior_walls(self, space: Space) -> list[WallAxis]:
         """The space's walls that lie on the parcel outline.
