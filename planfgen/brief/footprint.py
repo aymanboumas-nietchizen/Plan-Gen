@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING
 from shapely.geometry import Polygon
 
 from planfgen.brief.feasibility import check_feasibility, estimate_partition_length
-from planfgen.brief.parcel import Parcel
+from planfgen.brief.parcel import EdgeType, Parcel
 from planfgen.brief.plan import Brief, InfeasibleBrief
 from planfgen.brief.programme import Programme
 from planfgen.brief.regulation import RegulationProfile
@@ -152,52 +152,50 @@ class Footprint:
     def against(self, parcel: Parcel, edge: int) -> Footprint:
         """The same footprint, pushed flush against one edge of the parcel.
 
-        A building that does not touch its entry edge has no front door: L5
-        looks for frontage on that edge and finds none, and every candidate is
-        refused as unreachable. Centring a solved footprint in the middle of a
-        larger parcel does exactly that, which is why `fit_brief` never leaves
-        one centred.
-
-        Which side of the bounding box the edge lies on is read from its
-        midpoint. Full placement — flush to the party walls, set back from a
-        retrait, and the remaining freedom as a search variable — is S15.
+        Kept because it says one thing plainly, and S14 needed exactly that. The
+        rule a brief is actually placed by is `place_footprint`, which honours
+        party walls and setbacks as well as the entry.
         """
-        minx, miny, maxx, maxy = parcel.outline.bounds
-        (x0, y0), (x1, y1) = parcel.segment(edge).coords
-        mid_x, mid_y = (x0 + x1) / 2, (y0 + y1) / 2
-        side = min(
-            (
-                (abs(mid_x - minx), "left"),
-                (abs(mid_x - maxx), "right"),
-                (abs(mid_y - miny), "bottom"),
-                (abs(mid_y - maxy), "top"),
-            )
-        )[1]
+        lox, loy, hix, hiy = parcel.buildable_bounds()
+        side = parcel.side_of(edge)
         if side == "left":
-            return replace(self, x=minx)
+            return replace(self, x=lox)
         if side == "right":
-            return replace(self, x=maxx - self.w)
+            return replace(self, x=hix - self.w)
         if side == "bottom":
-            return replace(self, y=miny)
-        return replace(self, y=maxy - self.h)
+            return replace(self, y=loy)
+        return replace(self, y=hiy - self.h)
+
+    def buildable(self, parcel: Parcel, tol: float = WITHIN_TOL) -> bool:
+        """True if the footprint is inside the parcel *and* clear of its
+        setbacks. `within` is the weaker test and asks only about the boundary.
+        """
+        if not self.within(parcel, tol):
+            return False
+        lox, loy, hix, hiy = parcel.buildable_bounds()
+        return (
+            self.x >= lox - tol
+            and self.y >= loy - tol
+            and self.x + self.w <= hix + tol
+            and self.y + self.h <= hiy + tol
+        )
 
     @classmethod
     def centred(cls, area: float, aspect: float, parcel: Parcel) -> Footprint:
         """A footprint of this gross area and proportion, centred in the parcel.
 
-        Centring is where the solve leaves it, not where it should stay: a
-        centred footprint on a larger parcel touches no edge, so it has no
-        street frontage and nothing can reach it. `fit_brief` pushes it against
-        the entry edge; where a building really sits on its site is S15.
+        Centred in what may be built on, which is the parcel less its
+        setbacks — but centring is only where the solve leaves it.
+        `place_footprint` decides where a building actually stands.
         """
         if area <= 0 or aspect <= 0:
             raise ValueError(f"area and aspect must be positive, got {area}, {aspect}")
         h = (area / aspect) ** 0.5
         w = area / h
-        minx, miny, maxx, maxy = parcel.outline.bounds
+        lox, loy, hix, hiy = parcel.buildable_bounds()
         return cls(
-            x=minx + ((maxx - minx) - w) / 2,
-            y=miny + ((maxy - miny) - h) / 2,
+            x=lox + ((hix - lox) - w) / 2,
+            y=loy + ((hiy - loy) - h) / 2,
             w=w,
             h=h,
         )
@@ -302,7 +300,7 @@ def fit_footprint(
         )
 
     solved = Footprint.centred(b, aspect, parcel)
-    if not solved.within(parcel):
+    if not solved.buildable(parcel):
         budget = _budget_for(programme, parcel, profile, tree, demand)
         if not budget.ok:
             raise InfeasibleBrief(budget)
@@ -365,6 +363,54 @@ def fit_programme(
     )
 
 
+def place_footprint(footprint: Footprint, parcel: Parcel) -> Footprint:
+    """Where a building of this size stands on this parcel.
+
+    Three rules, in order, applied independently to each axis:
+
+    1. **Flush to a party wall.** A MITOYEN edge is a boundary built *up to* —
+       that is what makes it a party wall — so a setback there is a mistake and
+       the building takes the boundary.
+    2. **Flush to the entry.** Failing a party wall, address the street: the
+       shorter the walk from the boundary to the front door, the better, and a
+       building that touches its entry edge cannot fail to have frontage.
+    3. **Centred.** With neither, sit in the middle of what is left.
+
+    Setbacks are honoured throughout — "flush" means flush to the buildable
+    limit, not to the boundary, and the two differ by whatever the edge asks
+    for. A MITOYEN edge that also carries a setback is contradictory; the
+    setback wins, because it is the one a building can be refused for.
+
+    This is a rule, not a search. `slide_footprint` is what lets the annealer
+    disagree with it.
+    """
+    lox, loy, hix, hiy = parcel.buildable_bounds()
+    sides = parcel.sides()
+    entry = parcel.side_of(parcel.entry_edge)
+
+    def place(low: float, high: float, extent: float, near: str, far: str) -> float:
+        if _is(sides, near, EdgeType.MITOYEN):
+            return low
+        if _is(sides, far, EdgeType.MITOYEN):
+            return high - extent
+        if entry == near:
+            return low
+        if entry == far:
+            return high - extent
+        return low + ((high - low) - extent) / 2
+
+    return replace(
+        footprint,
+        x=place(lox, hix, footprint.w, "left", "right"),
+        y=place(loy, hiy, footprint.h, "bottom", "top"),
+    )
+
+
+def _is(sides: dict, side: str, kind: EdgeType) -> bool:
+    spec = sides.get(side)
+    return spec is not None and spec.kind is kind
+
+
 def fit_brief(
     brief: Brief, tree: SlicingTree, aspect: float | None = None
 ) -> Brief:
@@ -376,18 +422,18 @@ def fit_brief(
     scale the programme down, which is the honest answer to a site that is too
     small — every room loses the same fraction.
 
-    The solved footprint is then pushed against the entry edge. That is not a
+    The solved footprint is then *placed* by `place_footprint`. That is not a
     refinement: a building floating in the middle of its parcel has no frontage
     on the street, so L5 cannot find a front door and every candidate is refused
-    as unreachable. Solving the size without settling the contact would have
+    as unreachable. Solving the size without settling where it stands would have
     made fitted briefs *less* buildable than hand-calibrated ones.
     """
     try:
         solved = fit_footprint(
             brief.programme, brief.parcel, brief.profile, tree, aspect
         )
-        placed = solved.against(brief.parcel, brief.parcel.entry_edge)
-        footprint = placed if placed.within(brief.parcel) else solved
+        placed = place_footprint(solved, brief.parcel)
+        footprint = placed if placed.buildable(brief.parcel) else solved
     except InfeasibleBrief:
         footprint = Footprint.of_parcel(brief.parcel)
         programme = fit_programme(

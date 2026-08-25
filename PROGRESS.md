@@ -712,3 +712,40 @@ Note:     CLAUDE.md documents `python -m planfgen.main`. There is no main module
           into but the studio, which S15 or a later session should do.
 Next:     S15 — where the footprint sits: flush to MITOYEN, `setback` on `EdgeSpec`,
           and `slide_footprint` / `shape_footprint` as moves.
+
+---
+
+## S15 — Where the footprint sits
+
+Built:    `place_footprint` — flush to a MITOYEN edge first (a party wall is built up
+          to; that is what makes it one), else flush to the entry, else centred.
+          `EdgeSpec.setback` with `Parcel.side_of` / `sides` / `buildable_bounds`;
+          setback belongs to the edge, not the profile, because it varies boundary by
+          boundary and neither regulation states a general one. Two brief moves:
+          `slide_footprint` and `shape_footprint`, the second re-solving so the rooms
+          keep exactly the area asked for — a thinner building spends more on facade.
+Result:   Letting the search move the building is worth about +0.01 mean and a lot at
+          the top. Twelve seeds, 400 iterations, `P_FOOTPRINT` swept 0 / .1 / .2 / .4:
+            16x13  0.8750  0.8623  0.8807  0.8531   best 0.8994 -> 0.9386
+            20x16  0.8786  0.8721  0.8885  0.8803   best 0.8997 -> 0.9398
+          0.20 wins on both, so the default is measured rather than picked. Cost
+          1.65 -> 2.17 ms per candidate, +31%, all of it `shape_footprint` re-solving.
+Fixed:    Two things the moves exposed. Footprint moves must wait for a valid plan —
+          proposed from iteration zero they made the search strictly worse, some seeds
+          going from finding a plan to finding none, because while nothing passes the
+          gates the TREE is what is being refused. And the restart is on the tree only:
+          it also reset the brief, so the building could never travel from the
+          proportion it was fitted at to a better one.
+LIMIT:    An elongated parcel still defeats it, and this is the one to fix next.
+          `fit_footprint` defaults to the parcel's own proportion, so 26x12 gets a
+          15.01 x 6.93 building whose rooms are strips: 0 of 12 seeds find a plan. At
+          aspect 1.25 it is 8 of 8 — the same building the search settles on when the
+          parcel is squarer. `P_FOOTPRINT_COLD` at 0.30 rescues 5 of 12 but costs a
+          tenth of the score on ordinary parcels, so it ships at 0.0. Seed compactness
+          is NOT a usable proxy for choosing the aspect: measured, it picks 1.70, which
+          is one of the values that fails. Choosing it wants S18's reference plans.
+Note:     `planfgen.search` re-exports `anneal` the function, which shadows `anneal`
+          the module — `import planfgen.search.anneal as A` binds the function and its
+          constants are unreachable. Cost an hour of wrong measurements. Use
+          `sys.modules`. The studio still does not call `fit_brief`.
+Next:     S16 — rectilinear parcels: decompose, then slice each rectangle.

@@ -44,14 +44,32 @@ _BLIND = frozenset({EdgeType.MITOYEN, EdgeType.RETRAIT})
 
 @dataclass(frozen=True)
 class EdgeSpec:
-    """One typed segment of the outline. `index` is its position in the ring."""
+    """One typed segment of the outline. `index` is its position in the ring.
+
+    `setback` is how far, in metres, the building must stand back from this
+    boundary. It lives on the edge rather than on the regulation profile
+    because it varies boundary by boundary — a plot is set back from the street
+    by one distance, from a neighbour by another, and built up to a party wall
+    with none at all. There is no national figure to put in a profile: the
+    decree's only stated retrait (ART. 46, 2 m) governs terrace superstructures,
+    not the footprint.
+    """
 
     index: int
     kind: EdgeType
+    setback: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.setback < 0:
+            raise ValueError(f"a setback cannot be negative, got {self.setback}")
 
     @classmethod
     def from_json(cls, entry: dict) -> EdgeSpec:
-        return cls(index=int(entry["index"]), kind=EdgeType[entry["kind"]])
+        return cls(
+            index=int(entry["index"]),
+            kind=EdgeType[entry["kind"]],
+            setback=float(entry.get("setback", 0.0)),
+        )
 
 
 @dataclass(frozen=True)
@@ -117,6 +135,67 @@ class Parcel:
         nx, ny = sign * dy, -sign * dx
         bearing = (math.atan2(nx, ny) - self.north) % (2 * math.pi)
         return Orientation(int(round(bearing / SECTOR)) % 8)
+
+    def side_of(self, i: int) -> str:
+        """Which side of the bounding box segment `i` lies on.
+
+        One of "left", "right", "bottom", "top", read from the segment's
+        midpoint. Bounding-box arithmetic, which is exact for the rectangular
+        parcels the engine builds on today; a rectilinear parcel has edges that
+        are on no side of its bounding box at all, and placing a building on one
+        is S16's problem.
+        """
+        minx, miny, maxx, maxy = self.outline.bounds
+        (x0, y0), (x1, y1) = self.segment(i).coords
+        mid_x, mid_y = (x0 + x1) / 2, (y0 + y1) / 2
+        return min(
+            (
+                (abs(mid_x - minx), "left"),
+                (abs(mid_x - maxx), "right"),
+                (abs(mid_y - miny), "bottom"),
+                (abs(mid_y - maxy), "top"),
+            )
+        )[1]
+
+    def sides(self) -> dict[str, EdgeSpec]:
+        """The edge governing each side of the bounding box.
+
+        Where two edges fall on the same side — which a rectilinear outline
+        does — the one demanding the larger setback wins, since both have to be
+        honoured.
+        """
+        out: dict[str, EdgeSpec] = {}
+        for spec in self.edges:
+            side = self.side_of(spec.index)
+            if side not in out or spec.setback > out[side].setback:
+                out[side] = spec
+        return out
+
+    def buildable_bounds(self) -> tuple[float, float, float, float]:
+        """(minx, miny, maxx, maxy) of what may be built on, after setbacks.
+
+        Raises if the setbacks leave nothing.
+        """
+        minx, miny, maxx, maxy = self.outline.bounds
+        sides = self.sides()
+
+        def back(side: str) -> float:
+            spec = sides.get(side)
+            return spec.setback if spec else 0.0
+
+        box = (
+            minx + back("left"),
+            miny + back("bottom"),
+            maxx - back("right"),
+            maxy - back("top"),
+        )
+        if box[2] <= box[0] or box[3] <= box[1]:
+            raise ValueError(
+                f"the setbacks leave nothing to build on: a "
+                f"{maxx - minx:.2f} x {maxy - miny:.2f} m parcel reduced to "
+                f"{box[2] - box[0]:.2f} x {box[3] - box[1]:.2f} m"
+            )
+        return box
 
     def interior(self, facade_t: float) -> Polygon:
         """The outline eroded by the façade thickness — the buildable inside."""

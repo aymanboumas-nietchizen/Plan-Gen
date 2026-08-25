@@ -7,6 +7,7 @@ of whatever it settles on.
 
 from planfgen.search.anneal import (
     KEEP_BEST,
+    P_FOOTPRINT,
     Result,
     RunStats,
     anneal,
@@ -15,20 +16,26 @@ from planfgen.search.anneal import (
     grid_for,
 )
 from planfgen.search.moves import (
+    BRIEF_MOVES,
     MOVES,
     flip_cut,
     insert_band,
     mutate,
+    mutate_brief,
     remove_band,
     regroup,
     rotate_band,
+    shape_footprint,
     slide_cut,
+    slide_footprint,
     swap_leaves,
 )
 
 __all__ = [
+    "BRIEF_MOVES",
     "KEEP_BEST",
     "MOVES",
+    "P_FOOTPRINT",
     "Result",
     "RunStats",
     "anneal",
@@ -38,9 +45,12 @@ __all__ = [
     "insert_band",
     "grid_for",
     "mutate",
+    "mutate_brief",
     "regroup",
     "remove_band",
     "rotate_band",
+    "shape_footprint",
     "slide_cut",
+    "slide_footprint",
     "swap_leaves",
 ]

@@ -24,7 +24,7 @@ from planfgen.evaluate.metrics import Scores, score
 from planfgen.partition.grid import StructuralGrid
 from planfgen.partition.plan import PartitionPlan
 from planfgen.partition.tree import SlicingTree
-from planfgen.search.moves import mutate
+from planfgen.search.moves import mutate, mutate_brief
 from planfgen.topology.relations import ProgrammeGraph
 
 #: How many of the best candidates a run hands back.
@@ -34,6 +34,27 @@ KEEP_BEST = 10
 #: seed rather than drifting further. Without it the walk diverges: measured at
 #: 0 valid plans in 200 iterations on the v1 brief, against 25 with it.
 RESTART = 0.35
+
+#: How often the search moves the *building* rather than the plan inside it.
+#: Only ever on a brief that has a footprint — one without builds on its whole
+#: parcel, and shrinking it behind the caller's back would answer a different
+#: question. Kept low because `shape_footprint` re-solves, which costs a
+#: `fit_footprint`; measured at 0.20 the run is about a third dearer per
+#: candidate than a tree-only search.
+P_FOOTPRINT = 0.20
+
+#: And how often before anything has passed a gate. Zero, and measured rather
+#: than assumed: while nothing is valid the *tree* is what the gates are
+#: refusing, and every footprint move is a tree move not taken.
+#:
+#: It is a constant rather than a plain `if` because the measurement is worth
+#: keeping. Raised to 0.30 it does rescue the case it was meant to — a building
+#: fitted to the proportion of a long thin parcel comes out a strip that no
+#: arrangement can furnish, and 26 x 12 m went from 0 of 12 seeds finding a plan
+#: to 5 of 12 — but it costs about a tenth of the score on ordinary parcels,
+#: which is the worse trade. The real fix is not to fit a strip in the first
+#: place; see PROGRESS.md, and S18's reference plans.
+P_FOOTPRINT_COLD = 0.0
 
 
 @dataclass(frozen=True)
@@ -48,6 +69,12 @@ class Result:
     @property
     def cost(self) -> float:
         return 1.0 - self.scores.globale
+
+    @property
+    def brief(self) -> Brief:
+        """What this candidate was built to. Not necessarily the brief handed
+        to `anneal`: the footprint is a search variable too."""
+        return self.plan.brief
 
 
 @dataclass
@@ -147,10 +174,9 @@ def anneal(
     but no candidate at all, so it is never accepted at any temperature.
     """
     rng = random.Random(seed)
-    grid = grid_for(brief)
     stats = stats if stats is not None else RunStats()
 
-    current = evaluate(tree0, brief, grid, graph, 0)
+    current = evaluate(tree0, brief, grid_for(brief), graph, 0)
     best: list[Result] = [current] if current else []
     if n_iter <= 0:
         return best
@@ -162,24 +188,44 @@ def anneal(
     ratio = (t1 / t0) ** (1.0 / max(1, n_iter - 1)) if t0 > 0 else 1.0
     temperature = t0
     walk = current.tree if current else tree0
+    walk_brief = current.brief if current else brief
+    movable = brief.footprint is not None
 
     for iteration in range(1, n_iter + 1):
-        candidate_tree = mutate(walk, rng, grid, band_budget)
+        chance = P_FOOTPRINT if current is not None else P_FOOTPRINT_COLD
+        if movable and rng.random() < chance:
+            candidate_tree = walk
+            candidate_brief = mutate_brief(walk_brief, walk, rng)
+        else:
+            candidate_tree = mutate(walk, rng, grid_for(walk_brief), band_budget)
+            candidate_brief = walk_brief
+        grid = grid_for(candidate_brief)
         stats.proposed += 1
-        candidate = evaluate(candidate_tree, brief, grid, graph, iteration)
+        candidate = evaluate(candidate_tree, candidate_brief, grid, graph, iteration)
 
         if candidate is None:
-            stats.reject(_why(candidate_tree, brief, grid))
+            stats.reject(_why(candidate_tree, candidate_brief, grid))
             # Nothing valid has been found yet, so there is no hill to climb.
             # Drift, so a seed that fails its own gates is not mutated forever
             # in place — but restart from the seed often enough that the walk
             # cannot wander off into ever stranger trees, which is what an
             # unbounded random walk does and it never comes back.
             if current is None:
-                walk = tree0 if rng.random() < RESTART else candidate_tree
+                if rng.random() < RESTART:
+                    walk = tree0
+                else:
+                    walk = candidate_tree
+                # The restart is on the *tree* only. Its job is to stop an
+                # unbounded walk wandering into ever stranger trees, and the
+                # footprint is neither unbounded nor high-dimensional — throwing
+                # it away too would mean the building could never travel from
+                # the proportion it was fitted at to one that works, which on a
+                # long thin parcel is the whole difficulty.
+                walk_brief = candidate_brief
         else:
             if current is None or _accept(candidate.cost - current.cost, temperature, rng):
-                current, walk = candidate, candidate.tree
+                current = candidate
+                walk, walk_brief = candidate.tree, candidate.brief
                 stats.accepted += 1
             best.append(candidate)
             best.sort(key=lambda r: r.cost)

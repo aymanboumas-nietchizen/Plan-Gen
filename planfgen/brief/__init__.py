@@ -15,6 +15,7 @@ from planfgen.brief.footprint import (
     fit_brief,
     fit_footprint,
     fit_programme,
+    place_footprint,
     scale_for,
     sized_demand,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "fit_brief",
     "fit_footprint",
     "fit_programme",
+    "place_footprint",
     "scale_for",
     "sized_demand",
 ]
