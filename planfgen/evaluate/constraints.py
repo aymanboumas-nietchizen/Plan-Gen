@@ -5,6 +5,21 @@ never traded off in a score. A plan with a 7 m2 chambre is not a slightly worse
 plan, it is not a plan. Only judgement calls get scored, and those live in
 `metrics.py`.
 
+**Aspect ratio and minimum width are NOT on that list, and are not gated here.**
+Both were once, and it was wrong twice over. CLAUDE.md names compactness among
+the *scored* judgement calls, and v1 held `MaxRatioRule` and every `MinWidthRule`
+as soft warnings — only the minimum *areas* and the corridor width were hard.
+ARCHITECTURE section 6 shows `if not part.aspects_ok(): return None` in its
+sketch of the loop, but that passage is arguing about cost, not about which
+checks are gates, and the rules file governs where the two disagree.
+
+It mattered: gating aspect discarded 222 of 500 candidates on the v1 brief and
+hid the real reason that brief cannot be built, which is that the furniture does
+not fit — the very failure ARCHITECTURE section 1 describes. Shape is now
+protected by `FURNITURE_GATE`, which is a gate CLAUDE.md does authorise and
+which asks the question that actually matters: not "is this room a slot" but
+"does a bed go in it".
+
 The gates run cheapest first and the first failure wins, so a candidate that
 fails on a float comparison never pays for the wall graph. Building the fabric
 is by far the most expensive thing here, and only `REACHABLE_GATE` needs it.
@@ -69,19 +84,23 @@ def _furniture_ok(plan, brief: Brief) -> bool:
 
 
 def _minima_ok(plan, brief: Brief) -> bool:
-    """Every room at or above the code minimum for its kind, measured on net.
+    """Every room at or above the code minimum AREA for its kind, on net.
+
+    Area only. `profile.min_width` is not checked here: v1 held those as
+    warnings and CLAUDE.md does not list width among the gates. A room too
+    narrow to use is caught by `FURNITURE_GATE`, which measures the thing the
+    width was a proxy for.
 
     Bands are exempt from the area *target* but not from the minimum: a
     corridor still has to be a legal corridor.
     """
     minima = brief.profile.min_area
-    widths = brief.profile.min_width
     for cell in plan.cells:
         kind = brief.programme.by_nom(cell.nom).kind
+        if kind not in minima:
+            continue
         net_w, net_h = cell.net_dims(brief.profile)
-        if kind in minima and net_w * net_h < minima[kind]:
-            return False
-        if kind in widths and min(net_w, net_h) < widths[kind]:
+        if net_w * net_h < minima[kind]:
             return False
     return True
 
@@ -100,11 +119,14 @@ FURNITURE_GATE = _Gate("furniture", _furniture_ok)
 MIN_AREA_GATE = _Gate("min_area", _minima_ok)
 REACHABLE_GATE = _Gate("reachable", _reachable_ok)
 
-#: Cheapest first. REACHABLE_GATE is last because it is the one that builds the
-#: wall graph.
+#: The gates a candidate must pass, cheapest first. REACHABLE_GATE is last
+#: because it is the one that builds the wall graph.
+#:
+#: ASPECT_GATE is deliberately absent — see the module docstring. It is still
+#: defined, so a caller who wants a stricter run can add it, but nothing in the
+#: search uses it and `all_gates` does not run it.
 GATES: tuple[Gate, ...] = (
     AREA_GATE,
-    ASPECT_GATE,
     MIN_AREA_GATE,
     FURNITURE_GATE,
     REACHABLE_GATE,

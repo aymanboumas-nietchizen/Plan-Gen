@@ -302,7 +302,9 @@ Decided:  THREE findings, all measured rather than assumed.
           graph, which is cached on the plan for the adjacency metric to reuse.
           The annealer restarts from the seed with p=0.35 while nothing valid has been
           found; unbounded drift diverges (0 valid in 200 without it).
-Warning:  THE V1 BRIEF CANNOT BE SEARCHED AT ALL, and the reason is the point of v2.
+Warning:  [WRONG — corrected in S9b below. The v1 brief searches fine once the gates
+          are right; this paragraph is kept only as the record of the mistake.]
+          THE V1 BRIEF CANNOT BE SEARCHED AT ALL, and the reason is the point of v2.
           Grown to 12.84 x 9.63 where an exact partition delivers its 103 m2, 5000
           iterations at a 20% area tolerance found ZERO valid plans — aspect rejected
           3621 of them. A 5 m2 WC beside a 30 m2 sejour cannot be a slicing-tree leaf
@@ -312,5 +314,36 @@ Warning:  THE V1 BRIEF CANNOT BE SEARCHED AT ALL, and the reason is the point of
           Also: no move CREATES or destroys a band, so the search cannot discover a
           T-spine. That is the move S10+ will want, and it would likely unlock the v1
           brief by giving the small wet rooms a second corridor arm to open onto.
+Next:     S10 — L4 services/ shafts, wet walls, R+n hooks
+
+## S9b — fix: aspect is scored, not gated              2026-08-24
+Built:    `ASPECT_GATE` removed from `GATES`; `min_width` removed from
+          `MIN_AREA_GATE`. 4 tests added to `test_search.py` pinning the contract.
+Why:      I had promoted two of v1's SOFT warnings into hard gates. v1 held
+          `MaxRatioRule(2.5, hard=False)` and every `MinWidthRule(hard=False)` as
+          warnings; only the minimum AREAS and the corridor width were hard. And
+          CLAUDE.md lists compactness among the SCORED judgement calls, not the gates.
+Call:     CLAUDE.md governs. It is the file that carries the rules every session, it
+          enumerates both sides deliberately, and ARCHITECTURE section 6's
+          `if not part.aspects_ok(): return None` is arguing about COST — "only O(1)
+          or small-graph checks" — not about which checks are gates. Shape is now
+          protected by FURNITURE_GATE, which CLAUDE.md does authorise and which asks
+          the question that matters: not "is this room a slot" but "does a bed fit".
+Corrects: S9 reported that the v1 brief CANNOT BE BUILT, on the evidence of 5000
+          iterations finding zero valid plans. That was my own gate, not the brief.
+          With the gates corrected the v1 brief searches immediately.
+Numbers:  Best-of-200 on the v1 seven-room brief at 12.84 x 9.63, seed 3, 200 proposed
+          33 accepted:
+            adjacences  1.0000   -- 9 of 9 door-capable   v1: 0.556 (5 of 9)
+            orientation 0.7500
+            circulation 1.0000   -- coefficient 9.79%
+            compacite   0.6276
+            globale     0.8941   (found at iteration 195)
+          Max area error 4.59%. Every one of v1's nine adjacencies now hosts a door,
+          against five in v1. THAT is the A/B S9 was asked for.
+          The five-room fixture is unchanged: 0.6929 -> 0.8113, adjacency 0.8929.
+Note:     The best v1-brief plan has a WC at 1.32 x 3.93 (ratio 2.98) and a sejour at
+          ratio 2.73 — both would have been thrown away by the old 2.5 gate, and both
+          are legal and furnishable. The WC needs 0.90 x 1.40 and has 1.32 x 3.93.
 Next:     S10 — L4 services/ shafts, wet walls, R+n hooks
 

@@ -31,7 +31,14 @@ from planfgen.brief import (
     RoomType,
     check_feasibility,
 )
-from planfgen.evaluate import AREA_TOLERANCE, GATES, Scores, all_gates, score
+from planfgen.evaluate import (
+    AREA_TOLERANCE,
+    ASPECT_GATE,
+    GATES,
+    Scores,
+    all_gates,
+    score,
+)
 from planfgen.partition import BandCut, Cut, Direction, Leaf, SlicingTree
 from planfgen.search import (
     KEEP_BEST,
@@ -266,6 +273,73 @@ def test_a_failed_gate_discards_the_candidate_rather_than_scoring_it():
 def test_gates_run_cheapest_first():
     assert [g.name for g in GATES][-1] == "reachable", "the one that builds walls"
     assert AREA_TOLERANCE > 0
+
+
+def test_aspect_is_scored_not_gated():
+    """CLAUDE.md lists compactness among the judgement calls, not the gates.
+
+    v1 held its 2.5:1 rule as a warning too. Gating it discarded 222 of 500
+    candidates on the v1 brief and hid the real reason that brief fails, which
+    is furniture. Shape is protected by FURNITURE_GATE instead.
+    """
+    assert "aspect" not in [g.name for g in GATES]
+    assert ASPECT_GATE.name == "aspect", "still available to a caller who wants it"
+
+    brief, graph = apartment_brief(), apartment_graph()
+    plan = seed_tree().realise(envelope_of(brief), brief, grid_for(brief))
+    assert 0.0 < score(plan, brief, graph).compacite < 1.0, "it carries the signal"
+
+
+def test_a_slot_passes_the_gates_only_if_the_furniture_fits():
+    """The gate that replaced the aspect gate has to actually bite."""
+    from planfgen.evaluate.constraints import ASPECT_GATE as AG, FURNITURE_GATE
+
+    brief = apartment_brief()
+    plan = seed_tree().realise(envelope_of(brief), brief, grid_for(brief))
+    assert FURNITURE_GATE.check(plan, brief)
+    assert AG.check(plan, brief)
+
+    # A chambre 2.00 m wide is legal on area and fails on furniture.
+    from planfgen.habitability import FURNITURE, fits
+
+    class _Slot:
+        def net_dims(self):
+            return (2.00, 9.00)
+
+    assert _Slot().net_dims()[0] * _Slot().net_dims()[1] > MA_PROFILE.min_area[
+        RoomType.CHAMBRE
+    ], "18 m2, well over the 9 m2 minimum"
+    assert fits(_Slot(), FURNITURE[RoomType.CHAMBRE]) is False
+
+
+def test_minimum_width_is_not_gated():
+    """v1 held every MinWidthRule soft; the profile still carries the numbers."""
+    from planfgen.evaluate.constraints import _minima_ok
+
+    brief = apartment_brief()
+    assert MA_PROFILE.min_width[RoomType.SEJOUR] == 3.00
+
+    narrow = SlicingTree(
+        BandCut(
+            Direction.V,
+            (
+                Cut(Direction.H, False, (Leaf("Sejour"), Leaf("Cuisine"))),
+                Cut(
+                    Direction.H,
+                    False,
+                    (Leaf("Ch1"), Cut(Direction.H, False, (Leaf("Ch2"), Leaf("SDB")))),
+                ),
+            ),
+        )
+    )
+    plan = narrow.realise(envelope_of(brief), brief, grid_for(brief))
+    # _minima_ok now consults min_area alone, so it cannot depend on min_width.
+    assert _minima_ok(plan, brief) is True
+    for cell in plan.cells:
+        kind = brief.programme.by_nom(cell.nom).kind
+        if kind in MA_PROFILE.min_area:
+            net_w, net_h = cell.net_dims(MA_PROFILE)
+            assert net_w * net_h >= MA_PROFILE.min_area[kind]
 
 
 # --- annealing --------------------------------------------------------------
