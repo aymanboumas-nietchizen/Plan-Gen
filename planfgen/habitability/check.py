@@ -38,13 +38,18 @@ def fit_report(plan, profile: RegulationProfile) -> dict[str, bool]:
 
     Accepts either a `FabricPlan`, whose spaces know their own kind, or a
     `PartitionPlan`, whose cells do not and are looked up in the programme.
+    Bands are not reported: a corridor is not furnished.
     """
     if hasattr(plan, "spaces"):
         rooms = [(s.nom, s.kind, s, None) for s in plan.spaces.values()]
     else:
         programme = plan.brief.programme
+        # Bands are skipped: a corridor is not furnished, and its clear width is
+        # already exactly `profile.corridor_clear` by construction.
         rooms = [
-            (c.nom, programme.by_nom(c.nom).kind, c, profile) for c in plan.cells
+            (c.nom, programme.by_nom(c.nom).kind, c, profile)
+            for c in plan.cells
+            if not c.is_band
         ]
 
     report: dict[str, bool] = {}

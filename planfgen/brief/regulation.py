@@ -110,3 +110,91 @@ _WALL_ATTR = {
 
 #: The default profile. Placeholder values — see the module docstring.
 MA_PROFILE = RegulationProfile()
+
+
+# ---------------------------------------------------------------------------
+# Sourced profiles. Everything above this line is unsourced placeholder; these
+# two carry figures read off the regulations themselves, with the article that
+# states each one. They disagree with each other, which is the reason a profile
+# is a profile: a plan legal in an habitat economique zone is not necessarily
+# legal in Casablanca, and one global constant cannot express that.
+# ---------------------------------------------------------------------------
+
+#: Decret n° 2-64-445 (26 December 1964), Reglement general de construction
+#: d'habitat economique. Applies to `zones d'habitat economique`.
+#:   ART. 3  ceiling 2.60 m coastal (within 25 km), 2.80 m inland, 2.25 m service
+#:   ART. 4  smallest dimension of a habitable room 2.35 m; 2.20 m if that is an
+#:           average width; and if a room is lit only on its short side its length
+#:           is at most twice the height under the lintel of its highest window
+#:   ART. 5  piece principale 12 m2; other habitable rooms 9 m2; cuisine 5 m2
+#:           (4 m2 if linked to a court or loggia of 2 m2), no kitchen dimension
+#:           under 1.70 m; salle d'eau 1.30 m2; WC 0.85 m2
+#:   ART. 6  stairs and degagements 0.80 m for one dwelling per floor, 1.00 m for
+#:           two to four, 1.10 m for five to ten, 1.20 m above ten
+#:   ART. 7  a bay under 0.35 m in any dimension is not a window; every habitable
+#:           room and kitchen is lit to at least 1/10 of its floor and never less
+#:           than 1 m2
+MA_ECONOMIQUE = RegulationProfile(
+    corridor_clear=0.80,
+    daylight_ratio=0.10,
+    min_area={
+        RoomType.SEJOUR: 12.0,
+        RoomType.CHAMBRE_PRINCIPALE: 12.0,
+        RoomType.CHAMBRE: 9.0,
+        RoomType.BUREAU: 9.0,
+        RoomType.CUISINE: 5.0,
+        RoomType.SDB: 1.30,
+        RoomType.WC: 0.85,
+    },
+    min_width={
+        RoomType.SEJOUR: 2.35,
+        RoomType.CHAMBRE_PRINCIPALE: 2.35,
+        RoomType.CHAMBRE: 2.35,
+        RoomType.BUREAU: 2.35,
+        RoomType.CUISINE: 1.70,
+        RoomType.COULOIR: 0.80,
+    },
+)
+
+#: Arrete municipal permanent, Casablanca. Municipal, and stricter than the
+#: national decree on almost everything.
+#:   ART. 63  any permanent habitation 9 m2 with a window opening directly to
+#:            open air of at least 1/6 of the room; salles communes / living
+#:            14 m2; cuisines 6 m2, glazed opening at least 1 m2, and at least
+#:            4 m of direct view
+#:   ART. 64  a debarras may not exceed 1.75 m in width
+#:   ART. 65  salles de bains at least 3 m2
+MA_CASABLANCA = RegulationProfile(
+    corridor_clear=0.90,
+    daylight_ratio=1.0 / 6.0,
+    min_area={
+        RoomType.SEJOUR: 14.0,
+        RoomType.CHAMBRE_PRINCIPALE: 9.0,
+        RoomType.CHAMBRE: 9.0,
+        RoomType.BUREAU: 9.0,
+        RoomType.CUISINE: 6.0,
+        RoomType.SDB: 3.0,
+        RoomType.WC: 0.85,
+    },
+    min_width={
+        RoomType.SEJOUR: 2.35,
+        RoomType.CHAMBRE_PRINCIPALE: 2.35,
+        RoomType.CHAMBRE: 2.35,
+        RoomType.BUREAU: 2.35,
+        RoomType.CUISINE: 1.70,
+        RoomType.COULOIR: 0.90,
+    },
+)
+
+#: Minimum glazing per room whatever the ratio gives — decret ART. 7, and the
+#: same figure in Casablanca ART. 63 for kitchens.
+MIN_GLAZING = 1.00
+
+#: A bay smaller than this in any dimension is not a window — decret ART. 7.
+MIN_WINDOW_DIMENSION = 0.35
+
+PROFILES = {
+    "placeholder": MA_PROFILE,
+    "economique": MA_ECONOMIQUE,
+    "casablanca": MA_CASABLANCA,
+}

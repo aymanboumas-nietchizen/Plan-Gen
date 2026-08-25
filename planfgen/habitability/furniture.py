@@ -16,8 +16,16 @@ afterwards (ARCHITECTURE section 6).
 a floor but no ceiling: a WC measured 5.17 x 0.92 satisfies 0.90 x 1.40 twice
 over and is a corridor with a pan at one end. The furniture does not merely have
 to fit inside the room, it has to be *arrangeable* in it, and past some
-proportion it is not. `None` means unbounded, which is right for a corridor and
-wrong for everything else.
+proportion it is not.
+
+The figure is 3.0 and it was chosen by measurement, not taste. Decret 2-64-445
+imposes no aspect ceiling at all — only a smallest dimension of 2.35 m for a
+habitable room (ART. 4) — so this number is ours and it costs capacity. Swept
+against a growing programme, the ceiling on how many rooms the search can place
+went: unbounded 11, at 4.0 ten, at 3.5 and 3.0 eight, at 2.5 six. The first
+values tried here were 2.0 to 2.5 per room type, and they cost five rooms of
+capacity to catch a fault that 3.0 catches too — the WC above is 5.62:1 and the
+cellier beside it 3.21:1, and both are refused at 3.0.
 
 This is a furniture constraint, not the aspect rule S9b took out of the gates.
 CLAUDE.md lists compactness among the scored judgement calls and furniture fit
@@ -43,28 +51,41 @@ class FurnitureSpec:
     max_ratio: float | None = None
 
 
+#: How far from square a room may be and still be arrangeable. One figure for
+#: every type, because there is no evidence for making it vary by room and a
+#: table of nine invented numbers reads as though there were. See the module
+#: docstring for how 3.0 was arrived at.
+ARRANGEABLE = 3.0
+
 #: Room types absent from this table carry no furniture requirement. Inventing
 #: one here would be an ergonomic rule invented in code.
 FURNITURE: dict[RoomType, FurnitureSpec] = {
     RoomType.CHAMBRE_PRINCIPALE: FurnitureSpec(
-        2.70, 3.00, "double bed, two bedsides, wardrobe", max_ratio=2.0),
+        2.70, 3.00, "double bed, two bedsides, wardrobe", max_ratio=ARRANGEABLE),
     RoomType.CHAMBRE: FurnitureSpec(
-        2.40, 2.70, "single or small double, wardrobe", max_ratio=2.0),
+        2.40, 2.70, "single or small double, wardrobe", max_ratio=ARRANGEABLE),
     RoomType.SEJOUR: FurnitureSpec(
-        3.00, 4.00, "seating group and a dining table", max_ratio=2.2),
+        3.00, 4.00, "seating group and a dining table", max_ratio=ARRANGEABLE),
     RoomType.CUISINE: FurnitureSpec(
-        1.80, 2.40, "one run of units plus a passing width", max_ratio=2.5),
+        1.80, 2.40, "one run of units plus a passing width", max_ratio=ARRANGEABLE),
     RoomType.SDB: FurnitureSpec(
-        1.70, 1.90, "bath or shower, basin, and a standing zone", max_ratio=2.2),
+        1.70, 1.90, "bath or shower, basin, and a standing zone", max_ratio=ARRANGEABLE),
     RoomType.WC: FurnitureSpec(
-        0.90, 1.40, "pan plus the approach in front of it", max_ratio=2.2),
+        0.90, 1.40, "pan plus the approach in front of it", max_ratio=ARRANGEABLE),
     RoomType.CELLIER: FurnitureSpec(
-        1.20, 1.60, "shelving one side and room to stand", max_ratio=2.5),
+        1.20, 1.60, "shelving one side and room to stand", max_ratio=ARRANGEABLE),
     RoomType.BUREAU: FurnitureSpec(
-        2.10, 2.60, "desk, chair pulled back, and shelving", max_ratio=2.2),
+        2.10, 2.60, "desk, chair pulled back, and shelving", max_ratio=ARRANGEABLE),
     RoomType.ENTREE: FurnitureSpec(
-        1.40, 1.60, "somewhere to put a coat and turn round", max_ratio=2.5),
-    # A corridor is meant to be long, so it alone has no ceiling.
-    RoomType.COULOIR: FurnitureSpec(
-        1.20, 2.00, "clear passing width, and long enough to be a run"),
+        1.40, 1.60, "somewhere to put a coat and turn round", max_ratio=ARRANGEABLE),
 }
+
+# COULOIR is deliberately absent. A corridor's clear width is a REGULATION
+# value, and CLAUDE.md keeps those in `brief/regulation.py` and nowhere else —
+# it is `profile.corridor_clear`, and the band cut sets the corridor to exactly
+# that by construction, so there is nothing left for a gate to check.
+#
+# Having it here as well was a duplicated regulation, and it duly went wrong the
+# moment a real profile arrived: decret 2-64-445 ART. 6 puts a degagement
+# serving one dwelling at 0.80 m, and a 0.80 m corridor failed a 1.20 m spec
+# copied from the placeholder profile. Every plan was refused for being legal.

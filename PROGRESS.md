@@ -601,3 +601,44 @@ Warning:  THE 14-ROOM VILLA NO LONGER PRODUCES A VALID PLAN. Neither a larger pa
 Next:     Regulations to encode when they arrive. After that, non-rectangular parcels
           (rectilinear decomposition), then a move that inserts a BandCut.
 
+## S17 — the regulations, found and read                        2026-08-25
+Built:    `MA_ECONOMIQUE` and `MA_CASABLANCA` in `brief/regulation.py`, each figure
+          carrying the article that states it; `MIN_GLAZING`, `MIN_WINDOW_DIMENSION`,
+          `PROFILES`. `ARRANGEABLE = 3.0` replacing nine invented per-type ratios.
+          243 tests pass.
+Sources:  Decret n° 2-64-445 (26 Dec 1964), reglement general de construction d'habitat
+          economique — read from the PDF, not from a summary. And the Arrete municipal
+          permanent of Casablanca. THEY DISAGREE, which is why a profile is a profile.
+            ART. 3  ceiling 2.60 coastal / 2.80 inland, 2.25 service
+            ART. 4  smallest dimension of a habitable room 2.35 m (2.20 if average);
+                    a room lit only on its short side is at most twice its lintel
+                    height long — a daylight-depth rule this engine does not have
+            ART. 5  piece principale 12 m2, other habitable 9, cuisine 5 (4 with a
+                    loggia) and no kitchen dimension under 1.70, salle d'eau 1.30,
+                    WC 0.85
+            ART. 6  degagements 0.80 m for one dwelling, 1.00 for 2-4, 1.10 for 5-10,
+                    1.20 above ten
+            ART. 7  glazing 1/10 of the floor and never under 1 m2
+          Casablanca ART. 63 living 14 m2, glazing 1/6, cuisine 6 m2 with 4 m of vue
+          directe; ART. 64 debarras width at most 1.75; ART. 65 salle de bain 3 m2.
+Verdict:  THE PLACEHOLDERS WERE MOSTLY TOO STRICT, not too loose. min_area for the
+          chambre (9) and the piece principale (12) were exactly right. Everything else
+          was over: SDB 3.5 against 1.30, WC 1.2 against 0.85, cuisine 6 against 5,
+          min_width 2.70-3.00 against 2.35, daylight 0.125 against 0.10. The WC
+          contradiction found in S14 was an artefact of an invented 1.2.
+Bug:      `FURNITURE[COULOIR]` was a REGULATION VALUE LIVING OUTSIDE regulation.py, which
+          CLAUDE.md forbids, and it duly broke the moment a real profile arrived: a
+          0.80 m degagement, legal under ART. 6, failed a 1.20 m spec copied from the
+          placeholder. Every plan was refused for being legal. Removed; a band's clear
+          width is `profile.corridor_clear` by construction and needs no gate.
+Measured: The invented per-type `max_ratio` of 2.0-2.5 was the single thing capping the
+          engine. Swept against a growing programme on the decret profile, the number
+          of rooms the search can place: unbounded 11, at 4.0 ten, at 3.5 and 3.0 eight,
+          at 2.5 six. One figure of 3.0 still refuses both faults from the drawing
+          review (the WC at 5.62:1, the cellier at 3.21:1) and buys back two rooms.
+Result:   CEILING 6 -> 8 ROOMS, and the scores went UP, from 0.835 to 0.883-0.926.
+          Eight cells is a salon, three chambres, cuisine, SDB, WC and circulation —
+          an F4. Six is an F3. Al Omrane builds 70% F3 and 30% F4, so the engine now
+          reaches the whole of the dominant Moroccan typology.
+Next:     The deep analysis, and then non-rectangular parcels.
+
