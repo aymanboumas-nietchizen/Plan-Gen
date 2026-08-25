@@ -347,3 +347,35 @@ Note:     The best v1-brief plan has a WC at 1.32 x 3.93 (ratio 2.98) and a sejo
           are legal and furnishable. The WC needs 0.90 x 1.40 and has 1.32 x 3.93.
 Next:     S10 — L4 services/ shafts, wet walls, R+n hooks
 
+## S10 — L4 services/ shafts, wet walls, R+n hooks     2026-08-24
+Built:    `services/{shaft,wet,stacking}.py` and `planfgen/tests/test_services.py`.
+          `ShaftType`, `Shaft`, `wet_clusters`, `place_shafts`; `assign_wet_walls`,
+          `wet_report`; `Level`, `assign_stack_ids`, `Conflict`, `stack_conflicts`.
+Proves:   17 tests pass (178 total). On the 12x9 seven-space flat the corridor splits
+          the wet rooms into two clusters (Cuisine | SDB+WC), one shaft each, and every
+          wet room ends with a wall on a shaft. The SDB-WC wall retypes to WET. The R+n
+          test holds: stack_conflicts(level, deepcopy(level)) == []; removing the
+          V:x=12.00 bearing line gives exactly one Conflict naming it.
+Decided:  A shaft is sited on a wall two wet rooms share where the cluster has one, so
+          one stack serves both. A lone wet room gets its shaft on a wall that could not
+          have carried a window anyway — a MITOYEN or RETRAIT first, then the wall it
+          shares least. Facades are never retyped WET: a wall between a bathroom and the
+          street is the outside, and a 0.30 facade already hides a stack.
+          `assign_wet_walls` RE-SOLIDIFIES the spaces it touches. WET is 0.20 against a
+          cloison's 0.10, so both rooms lose 0.05 m of width; leaving the net polygons
+          stale would break L3's own guarantee that its areas are measured. Measured on
+          the fixture: SDB and WC each lose 0.05 * net_h.
+Bug:      Caught by printing the ids rather than trusting them. Snapping a SHAFT centre
+          to the structural grid moved it metres — a shaft at (9.15, 1.25) came back as
+          `SH:8.00,0.00` on a 4.00 x 4.50 module. Worse, two bearing lines under 2.00 m
+          apart collapsed onto one id, which would have hidden exactly the conflicts this
+          module exists to find. `stable()` now takes the grid line only when the
+          coordinate is genuinely on it (within 1e-6) and otherwise keeps its own,
+          rounded to the centimetre. A facade axis inset half a wall is not on the grid
+          and no longer pretends to be.
+Note:     A bearing run split by noding is several axes with ONE stack id — the id names
+          the line, not the segment, which is what stacks. There is a test for it.
+          Nothing outside services/ and its tests calls `stack_conflicts`, exactly as
+          ARCHITECTURE section 7 intends.
+Next:     S11 — L6 openings/ doors and windows
+
