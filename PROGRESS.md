@@ -411,3 +411,32 @@ Warning:  The glazing shortfall check reports a room that cannot fit its require
           not something to paper over. Nothing gates on it yet.
 Next:     S12 — L8 document/ DXF and dimensions
 
+## S12 — L8 document/ DXF and dimensions                2026-08-25
+Built:    `document/{dimensions,dxf}.py` and `planfgen/tests/test_document.py`;
+          `ezdxf>=1.1` added to pyproject. `DimensionChain`, `exterior_chains`,
+          `interior_chains`, `room_stamp`, `stamp_text`, `LAYERS`, `export_dxf`.
+Proves:   16 tests pass (212 total). Every test goes through `ezdxf.readfile` rather
+          than inspecting the document in memory — a file ezdxf writes but will not
+          reopen is worse than no file. All ten layers exist with their colour and
+          lineweight; one closed four-point polyline per wall solid, each on the layer
+          for its kind; a stamp per space carrying its net area to 2 dp; every chain
+          span is a real DIMENSION entity on COTATION.
+          On the reference flat: 34 LWPOLYLINE, 34 HATCH, 32 LINE, 12 DIMENSION,
+          7 ARC, 7 MTEXT. Stamp reads `Sejour\P23.04 m2\P4.80 x 4.80`.
+Decided:  Walls go out as SOLIDS, one layer per kind, never as hairlines — the whole
+          claim of v2 is that a wall has thickness, and a DXF of lines would throw away
+          the thing the engine exists to compute. Openings are GAPS cut in those solids,
+          not symbols laid over them, so what is drawn is what would be built; there is
+          a test asserting the cut file has more wall polylines than the plain one.
+          An exterior chain ticks only the walls that actually MEET that side, so the
+          bottom reads [0, 5.00, 6.30, 9.15, 12.00] and the top omits 9.15 — the SDB/WC
+          wall does not reach the back. A drawing showing one chain for both would be
+          hiding half the plan.
+          Interior chains follow BEARING lines only. A plan cut entirely with cloisons
+          has none, which is correct rather than empty: there is nothing structural in
+          it to dimension. The test fixture retypes two walls PORTEUR to exercise them.
+Note:     `doc.saveas(path)`, never `doc.save()`, as the prompt requires. $INSUNITS is
+          set to 6, metres. Room stamps are MTEXT with `\P` line breaks, so splitting
+          a stamp on `\P` recovers the nom.
+Next:     S13 — Grasshopper, IFC, studio (the last session)
+
