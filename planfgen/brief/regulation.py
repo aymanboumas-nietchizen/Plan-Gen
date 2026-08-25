@@ -56,11 +56,20 @@ class RegulationProfile:
     wet_t: float = 0.20
     corridor_clear: float = 1.20
     door_leaf: float = 0.80
+    entry_leaf: float = 0.90
     door_jamb: float = 0.10
     pmr_circle: float = 1.50
     daylight_ratio: float = 0.125
+    allege_h: float = 1.00
+    head_h: float = 2.20
     min_area: dict[RoomType, float] = field(default_factory=lambda: dict(_MIN_AREA))
     min_width: dict[RoomType, float] = field(default_factory=lambda: dict(_MIN_WIDTH))
+
+    @property
+    def glazing_height(self) -> float:
+        """Head less allege: how tall a window is, and so how wide it must be
+        to deliver the glazing a room needs."""
+        return self.head_h - self.allege_h
 
     def thickness_of(self, wall_kind: str) -> float:
         """Thickness in m of a wall of this kind.
@@ -74,6 +83,11 @@ class RegulationProfile:
                 f"unknown wall kind {wall_kind!r}; expected one of "
                 f"{', '.join(sorted(_WALL_ATTR))}"
             ) from None
+
+    @property
+    def entry_module(self) -> float:
+        """Metres of facade the front door needs: a wider leaf, same jambs."""
+        return self.entry_leaf + 2 * self.door_jamb
 
     @property
     def door_module(self) -> float:

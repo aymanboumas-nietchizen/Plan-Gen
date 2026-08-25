@@ -379,3 +379,35 @@ Note:     A bearing run split by noding is several axes with ONE stack id — th
           ARCHITECTURE section 7 intends.
 Next:     S11 — L6 openings/ doors and windows
 
+## S11 — L6 openings/ doors and windows                2026-08-24
+Built:    `openings/{door,window,place}.py` and `planfgen/tests/test_openings.py`.
+          `Door` with `clearance_box`/`clashes_with`/`free_slot`; `Window`,
+          `required_glazing`, `size_windows`; `place_doors`, `place_windows`,
+          `place_openings`, `OpeningReport`.
+Proves:   18 tests pass (196 total). THE LEGALITY TEST holds: on a parcel whose east
+          and west edges are MITOYEN no window lands on either, and Ch2 — which touches
+          only the party wall — is returned as an ERROR, not a warning.
+          `required_glazing` of a 20.00 m2 room at 0.125 is 2.50. `place_doors` refuses
+          a 0.63 m run with a message naming both 0.63 and the 1.00 m module. Two doors
+          on one wall never overlap, checked pairwise on a real seven-space plan.
+Decided:  A door's clearance box is the opening's own interval along the wall by one
+          leaf deep on the swing side — the bounding rectangle of the quarter-disc.
+          That is why two doors clear each other exactly when their openings do not
+          overlap on the same side, which makes the test a float comparison.
+          `Door` needed a sixth field the spec did not name: `swing_side`. A door knows
+          its wall and the NAME of the room it opens into, and a name is not a
+          direction — `clearance_box` could not otherwise say which way the leaf sweeps.
+          `place_windows` takes an optional `programme`: a Space carries a kind but not
+          the line of brief it came from, so the explicit `RoomSpec.daylight` flag wins
+          where the brief is to hand and `DAYLIGHT_KINDS` decides otherwise.
+Touched L0: `allege_h=1.00`, `head_h=2.20`, `entry_leaf=0.90` added to
+          `RegulationProfile`, with `glazing_height` and `entry_module`. All three are
+          regulation values and CLAUDE.md says those live ONLY in `brief/regulation.py`.
+          The spec put `ENTRY_LEAF = 0.90` in `door.py`; the name is kept but now reads
+          the profile's own field default, so there is one source of truth.
+Warning:  The glazing shortfall check reports a room that cannot fit its required glass
+          on the walls it has. Windows are capped at wall length less two jambs rather
+          than being made wider than their wall — the shortfall is a fact about the plan,
+          not something to paper over. Nothing gates on it yet.
+Next:     S12 — L8 document/ DXF and dimensions
+
