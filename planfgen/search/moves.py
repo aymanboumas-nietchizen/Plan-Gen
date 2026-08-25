@@ -128,6 +128,46 @@ def rotate_band(tree: SlicingTree, rng: random.Random) -> SlicingTree:
     )
 
 
+def insert_band(tree: SlicingTree, rng: random.Random, budget: int = 0) -> SlicingTree:
+    """Turn a binary cut into a corridor band.
+
+    The move the search was missing. Nothing else creates circulation, so a
+    seed with one spine could only ever be rearranged into another plan with
+    one spine — and past about eight rooms one spine cannot both reach every
+    room and leave any of them a decent shape. Measured before this existed:
+    the ceiling sat at eight rooms however long the run.
+
+    `budget` is how many bands the programme can still name. A band takes its
+    name from a circulation room, so proposing more of them than the brief has
+    is proposing a plan that cannot be realised.
+    """
+    if len(tree.bands()) >= budget:
+        return tree
+    target = _pick(rng, _cut_indices(tree))
+    if target is None:
+        return tree
+    return _apply(
+        tree,
+        target,
+        lambda node: BandCut(direction=node.direction, children=node.children),
+    )
+
+
+def remove_band(tree: SlicingTree, rng: random.Random) -> SlicingTree:
+    """Turn a corridor band back into an ordinary cut, freeing its name."""
+    bands = _indices(tree, BandCut)
+    if len(bands) < 2:
+        return tree          # never remove the last one; a plan needs a way in
+    target = rng.choice(bands)
+    return _apply(
+        tree,
+        target,
+        lambda node: Cut(
+            direction=node.direction, structural=False, children=node.children
+        ),
+    )
+
+
 def regroup(tree: SlicingTree, rng: random.Random) -> SlicingTree:
     """Lift one room out of the tree and graft it back somewhere else.
 
@@ -176,14 +216,24 @@ def _other(direction: Direction) -> Direction:
 
 
 #: Every move, for the annealer to draw from.
-MOVES = (swap_leaves, flip_cut, slide_cut, rotate_band, regroup)
+MOVES = (swap_leaves, flip_cut, slide_cut, rotate_band, regroup,
+         insert_band, remove_band)
 
 
 def mutate(
-    tree: SlicingTree, rng: random.Random, grid: StructuralGrid | None = None
+    tree: SlicingTree,
+    rng: random.Random,
+    grid: StructuralGrid | None = None,
+    band_budget: int = 1,
 ) -> SlicingTree:
-    """One random move. `slide_cut` is the only one that wants the grid."""
+    """One random move.
+
+    `slide_cut` wants the grid; `insert_band` wants to know how many bands the
+    programme can name, since a band takes its name from a circulation room.
+    """
     move = rng.choice(MOVES)
     if move is slide_cut:
         return slide_cut(tree, rng, grid)
+    if move is insert_band:
+        return insert_band(tree, rng, band_budget)
     return move(tree, rng)

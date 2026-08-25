@@ -642,3 +642,25 @@ Result:   CEILING 6 -> 8 ROOMS, and the scores went UP, from 0.835 to 0.883-0.92
           reaches the whole of the dominant Moroccan typology.
 Next:     The deep analysis, and then non-rectangular parcels.
 
+## S18 — the move that makes circulation                        2026-08-25
+Built:    `insert_band` and `remove_band` in `search/moves.py`; `mutate` gained a
+          `band_budget`, which `anneal` derives from the programme's circulation
+          rooms. 247 tests pass.
+Why:      Flagged in S9 and confirmed twice since: NOTHING CREATED CIRCULATION. A seed
+          with one spine could only ever be rearranged into another plan with one
+          spine, and S15 showed one spine cannot both reach thirteen rooms and leave
+          any of them a decent shape. A band takes its name from a circulation room, so
+          the budget is what the brief declares — proposing more is proposing a plan
+          that cannot be realised, and `remove_band` never takes the last one.
+Result:   CEILING 8 -> 9 CELLS. Smaller than hoped: `insert_band` converts a cut in
+          place, so it puts a corridor where a wall was but does not rearrange the
+          rooms around it. Getting past nine wants a move that restructures a subtree
+          AROUND a new band, not one that relabels a node.
+Session:  Taken together with S16 and S17, the capacity went 6 -> 8 -> 9 cells and the
+          scores from 0.835 to 0.879-0.932. Nine cells is a salon, three chambres,
+          cuisine, SDB, WC and two circulation spaces.
+Also:     `test_every_metric_varies` was fragile again — a single random walk samples one
+          corner of the space, and merely ADDING two moves changed the draw order and
+          with it the answer. It now unions six independent walks, which is a property
+          of the space rather than of the walk.
+

@@ -423,17 +423,22 @@ def test_every_metric_varies():
     """
     brief, graph = apartment_brief(), apartment_graph()
     grid = grid_for(brief)
-    rng = random.Random(0)
 
+    # Several independent walks, not one. A single walk samples one corner of
+    # the space, and which corner depends on the move set — adding a move
+    # changed the draw order and the answer with it, which is a property of the
+    # walk and not of any metric.
     results = []
-    tree = seed_tree()
-    for step in range(4000):
-        tree = mutate(tree, rng, grid)
-        candidate = evaluate(tree, brief, grid, graph, step)
-        if candidate is not None:
-            results.append(candidate)
-        elif rng.random() < 0.25:
-            tree = seed_tree()
+    for seed in range(6):
+        rng = random.Random(seed)
+        tree = seed_tree()
+        for step in range(1200):
+            tree = mutate(tree, rng, grid)
+            candidate = evaluate(tree, brief, grid, graph, step)
+            if candidate is not None:
+                results.append(candidate)
+            elif rng.random() < 0.25:
+                tree = seed_tree()
 
     # Every candidate found, not a slice of them. Taking a fixed-stride sample
     # makes the result depend on which stride: fifty saw five orientations here

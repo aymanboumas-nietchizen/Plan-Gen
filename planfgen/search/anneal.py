@@ -139,12 +139,16 @@ def anneal(
     if n_iter <= 0:
         return best
 
+    # A band is named from a circulation room, so the programme sets how many
+    # the search may propose.
+    band_budget = max(1, len(brief.programme.circulation_rooms))
+
     ratio = (t1 / t0) ** (1.0 / max(1, n_iter - 1)) if t0 > 0 else 1.0
     temperature = t0
     walk = current.tree if current else tree0
 
     for iteration in range(1, n_iter + 1):
-        candidate_tree = mutate(walk, rng, grid)
+        candidate_tree = mutate(walk, rng, grid, band_budget)
         stats.proposed += 1
         candidate = evaluate(candidate_tree, brief, grid, graph, iteration)
 
