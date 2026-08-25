@@ -664,3 +664,23 @@ Also:     `test_every_metric_varies` was fragile again — a single random walk 
           with it the answer. It now unions six independent walks, which is a property
           of the space rather than of the walk.
 
+
+---
+
+## S18 — The plan for the gaps (no engine code)
+
+Built:    `PROMPTS-NEXT.md` — S14 to S19, in the order that unblocks the most.
+Found:    `envelope_of` returns the parcel's BOUNDING BOX, so the footprint is always
+          the whole site. That one line is three separate gaps: the brief has to be
+          hand-rescaled to the parcel, coverage is trivially 100% so no coverage gate
+          was ever written, and `.bounds` of an L is a rectangle including the notch.
+Measured: the area error is a single scalar, not a per-room problem — spread between
+          best and worst room is 0.0000% at every parcel size, because `_nudge`
+          renormalises. So fitting is a closed form: scaling the programme is one
+          realise plus one multiply (0.000000% residual), and solving the footprint
+          takes FOUR secant steps (~3e-10 m2) at any aspect ratio.
+Checked:  neither the décret nor the Casablanca arrêté states a CES/emprise — that
+          comes from the zone's plan d'aménagement. ART.46's 2 m retrait is a roof
+          superstructure rule, not a footprint setback. Both recorded so neither gets
+          invented later; setback belongs on `EdgeSpec`, not on the profile.
+Next:     S14. CLAUDE.md names coverage among the gates and it has never existed.
