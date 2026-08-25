@@ -371,3 +371,95 @@ def test_a_balanced_tree_needs_no_refinement():
     one = four_room_tree(structural=False).realise(ENVELOPE, brief, grid(), refine=0)
     assert one.max_area_error(MA_PROFILE) == pytest.approx(0.0, abs=EXACT)
 
+
+
+# --- at scale ---------------------------------------------------------------
+
+
+def villa_targets() -> dict[str, float]:
+    """Thirteen rooms, calibrated so the tree below delivers them exactly."""
+    return {
+        "A": 42.0, "B": 24.0, "C": 17.0, "D": 7.0, "E": 22.0, "F": 15.0,
+        "G": 15.0, "H": 13.0, "I": 9.0, "J": 8.0, "K": 4.0, "L": 13.0, "M": 8.0,
+    }
+
+
+def _chain(direction: Direction, noms: list[str]):
+    node = Leaf(noms[-1])
+    for nom in reversed(noms[:-1]):
+        node = Cut(direction, False, (Leaf(nom), node))
+    return node
+
+
+def _nest(direction: Direction, noms: list[str]):
+    if len(noms) == 1:
+        return Leaf(noms[0])
+    half = len(noms) // 2
+    other = Direction.V if direction is Direction.H else Direction.H
+    return Cut(direction, False, (_nest(other, noms[:half]), _nest(other, noms[half:])))
+
+
+def _depth(node, d: int = 0) -> int:
+    if isinstance(node, Leaf):
+        return d
+    return max(_depth(child, d + 1) for child in node.children)
+
+
+def _calibrate(tree: SlicingTree, targets: dict[str, float], rounds: int = 8):
+    """Rescale every leaf's target until the tree delivers it.
+
+    Filtered by what the tree PLACES, not by room kind — a circulation room
+    standing as a leaf has a real target, and only a band has none.
+    """
+    placed = {leaf.nom for leaf in tree.leaves()}
+    working = dict(targets)
+    for _ in range(rounds):
+        brief = brief_for(working)
+        plan = tree.realise(ENVELOPE_BIG, brief, GRID_BIG)
+        got = sum(c.net_area(MA_PROFILE) for c in plan.cells if not c.is_band)
+        asked = sum(v for nom, v in working.items() if nom in placed)
+        if abs(got / asked - 1) < 1e-12:
+            break
+        scale = got / asked
+        working = {n: (v * scale if n in placed else v) for n, v in working.items()}
+    return brief_for(working)
+
+
+ENVELOPE_BIG = (0.15, 0.15, 27.7, 23.7)
+GRID_BIG = StructuralGrid.from_span(28.0, 24.0)
+
+
+@pytest.mark.parametrize("shape", ["chain", "balanced"])
+def test_exact_sizing_holds_at_thirteen_rooms(shape: str):
+    """Everything else here is four rooms. Depth must not degrade the refinement.
+
+    Measured: a depth-12 chain and a depth-4 nest over the same thirteen rooms
+    both reach 0.00000000%. The chain needs more passes to get there, which is
+    what `REFINE_PASSES` is for.
+    """
+    noms = list(villa_targets())
+    build = _chain if shape == "chain" else _nest
+    tree = SlicingTree(build(Direction.H, noms))
+    assert len(tree.leaves()) == 13
+    assert _depth(tree.root) == (12 if shape == "chain" else 4)
+
+    brief = _calibrate(tree, villa_targets())
+    plan = tree.realise(ENVELOPE_BIG, brief, GRID_BIG)
+
+    assert plan.max_area_error(MA_PROFILE) == pytest.approx(0.0, abs=1e-9)
+    assert sum(c.axis_area for c in plan.cells) == pytest.approx(
+        27.7 * 23.7, abs=1e-6
+    ), "thirteen cells still tile the envelope"
+
+
+def test_a_deep_tree_needs_more_refinement_passes_than_a_shallow_one():
+    """The single pass is far worse on a chain, and both converge."""
+    noms = list(villa_targets())
+    chain_tree = SlicingTree(_chain(Direction.H, noms))
+    brief = _calibrate(chain_tree, villa_targets())
+
+    once = chain_tree.realise(ENVELOPE_BIG, brief, GRID_BIG, refine=0)
+    many = chain_tree.realise(ENVELOPE_BIG, brief, GRID_BIG)
+
+    assert once.max_area_error(MA_PROFILE) > 0.01, "one pass is several percent out"
+    assert many.max_area_error(MA_PROFILE) < 1e-9

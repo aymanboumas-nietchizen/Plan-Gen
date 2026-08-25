@@ -522,3 +522,38 @@ Not done: NOTHING HERE VERIFIES THE NUMBERS AGAINST MOROCCAN REGULATION. That ne
           document this repo does not have. What is now known is which numbers matter
           and where the two files contradict each other.
 
+## S15 — a larger programme: 14 rooms, not 6                    2026-08-25
+Built:    3 scaling tests in `test_partition.py`. 241 tests pass, 1 skipped.
+Fixture:  A villa — 13 rooms plus a spine on 18.50 x 15.50 m, against the 5-7 room
+          flats everything else was tested on.
+Holds:    EXACT SIZING SURVIVES THE JUMP. A depth-12 chain and a depth-4 nest over the
+          same 13 rooms both reach 0.00000000% area error. Depth costs passes, not
+          accuracy: the chain is 8.23% at one pass and 0.000000% by twelve, the nest
+          1.24% and 0.000000%. The cells still tile the envelope exactly.
+          Performance scales about linearly: ~2.0 ms per candidate at 14 rooms against
+          ~1.0 ms at 6, so 600 iterations run in 1.2-1.9 s.
+          L1 still composes: 19 relations, the wet cluster contiguous at [2,3,4,5].
+Found:    ONE SPINE CANNOT SERVE THIRTEEN ROOMS, and the two failures are opposite.
+            chain     every room's edge on the spine, but 6 rooms too thin  -> 0 valid
+            balanced  good proportions, 5 rooms reached through another room -> 0 valid
+            T-spine   both                                                  -> 10 VALID
+          A chain gives every room a face on the corridor and squeezes each into a
+          strip; a balanced nest gives chunky rooms and buries five of them behind
+          others, which `reachable` correctly refuses. Two corridor arms give both:
+          globale 0.6533, area error 0.395%, circulation 11.87%.
+          This confirms the S9 warning from the other side. NO MOVE CREATES OR DESTROYS
+          A BAND, so the search cannot discover a T-spine — the seed must contain it,
+          and the programme must declare one circulation room per band. At 6 rooms that
+          did not matter. At 14 it decides whether anything is buildable at all.
+Bug:      Mine, not the engine's, and the same conflation the engine itself fixed in
+          S8b: the calibration harness summed delivered area over `not is_band` and
+          asked area over `not is_circulation`. An ENTREE is circulation by kind and a
+          leaf by placement, so it sat in one sum and not the other, and every room came
+          back short by an identical 3.2359%. A uniform error across every room is the
+          signature of a total that is wrong, not a distribution that is — the
+          refinement was working correctly the whole time. Fixed by filtering on what
+          the tree PLACES.
+Next:     Nothing scheduled. If R+n or larger programmes are the direction, a move that
+          inserts or removes a BandCut is now the highest-value single addition — it is
+          what stands between the search and a plan for anything above ten rooms.
+
