@@ -13,6 +13,12 @@ from planfgen.document.dimensions import (
     stamp_text,
 )
 from planfgen.document.dxf import LAYERS, WALL_LAYER, export_dxf
+from planfgen.document.gh import (
+    SCHEMA_VERSION,
+    rebuild_rectangle,
+    to_gh_json,
+    write_gh_json,
+)
 from planfgen.document.preview import PALETTE, to_svg
 
 __all__ = [
@@ -20,11 +26,15 @@ __all__ = [
     "DimensionChain",
     "LAYERS",
     "PALETTE",
+    "SCHEMA_VERSION",
     "WALL_LAYER",
     "export_dxf",
     "exterior_chains",
     "interior_chains",
+    "rebuild_rectangle",
     "room_stamp",
     "stamp_text",
+    "to_gh_json",
     "to_svg",
+    "write_gh_json",
 ]

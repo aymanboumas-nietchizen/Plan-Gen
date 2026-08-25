@@ -15,6 +15,12 @@ dependencies = [
     "pytest>=7.4",
 ]
 
+[project.optional-dependencies]
+# Neither is required to generate a plan. IFC export raises a plain RuntimeError
+# without ifcopenshell, and the studio is a viewer.
+ifc = ["ifcopenshell>=0.8"]
+studio = ["streamlit>=1.30"]
+
 [tool.setuptools.packages.find]
 include = ["planfgen*"]
 exclude = ["legacy*"]

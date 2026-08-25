@@ -440,3 +440,44 @@ Note:     `doc.saveas(path)`, never `doc.save()`, as the prompt requires. $INSUN
           a stamp on `\P` recovers the nom.
 Next:     S13 — Grasshopper, IFC, studio (the last session)
 
+## S13 — Grasshopper, IFC, studio                      2026-08-25
+Built:    `document/{gh,ifc}.py`, `grasshopper/planfgen_component.py`,
+          `studio/{render,app}.py`, `planfgen/tests/{test_gh,test_studio}.py` and an
+          IFC section in `test_document.py`. `ifcopenshell` and `streamlit` added to
+          pyproject as OPTIONAL extras — neither is needed to generate a plan.
+Proves:   231 tests pass, 1 skipped (the no-ifcopenshell branch; it is installed here).
+          THE ROUND TRIP holds: rebuilding a rectangle from the exported x, y, w, h
+          reproduces every space's axis polygon to 1e-9 by symmetric difference. v1
+          could not have passed it — its component took the BOUNDING BOX of a Voronoi
+          cell, so the rectangle in Rhino was never the room.
+          IFC: 7 IfcSpace, 22 IfcWall, one each of Project/Site/Building/Storey, and
+          Pset_SpaceCommon carrying Gross 25.00 against Net 23.04 — the distinction the
+          whole engine exists to compute. Streamlit boots headless and serves 200.
+Decided:  An IfcSpace carries the NET area. Exporting the axis area would hand the next
+          consultant a room several percent larger than the one that gets built, which
+          is the same lie v1's Rhino component told.
+          `export_ifc_openings` deliberately RAISES NotImplementedError. An IfcDoor is
+          only meaningful with an IfcOpeningElement voiding its wall, and a door written
+          without one is a symbol floating beside a solid wall — exactly the drawing
+          this project exists to stop producing. The DXF already cuts openings properly.
+          Openings reference walls by INDEX into the walls list: JSON has no object
+          identity, and matching a door back to its wall by comparing floats is how
+          round trips rot.
+Found:    A space's `outline` may carry more than four points. The corridor is a
+          rectangle with SEVEN vertices, because polygonize keeps a node where each
+          room T-joins its long sides. Still a rectangle, so the round trip holds, but a
+          consumer walking `outline` must not assume four points. `net_outline` has the
+          redundant ones dropped, and that is what the Rhino component builds from.
+Note:     The studio's stage selector is the argument of the rewrite made visible: L1 is
+          a graph with no geometry in it, L2 is geometry with no graph in it, and
+          `test_studio.py` asserts the two SVGs are not the same picture. The app is
+          verified by compile, by its renderers' tests, and by booting headless — not by
+          interaction, which nothing here can drive.
+Status:   THE STACK IS COMPLETE FOR ONE LEVEL. L0 to L8 all implemented and tested.
+Next:     Nothing scheduled. PROMPTS.md lists four follow-ons in value order: R+n on top
+          of the working `stack_conflicts`; rectilinear decomposition for non-rectangular
+          parcels; NSGA-II for a real Pareto front; Revit round-trip. Before any of them,
+          the placeholder tables in `brief/regulation.py` and `habitability/furniture.py`
+          are the highest-value thing to verify — S9b showed they decide whether a brief
+          is buildable at all.
+

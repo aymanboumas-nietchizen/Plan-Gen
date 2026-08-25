@@ -257,3 +257,67 @@ def test_a_shaft_is_drawn_on_the_gaine_layer(tmp_path: Path):
 def test_the_drawing_is_in_metres(tmp_path: Path):
     _fabric, _target, doc = written(tmp_path)
     assert doc.header["$INSUNITS"] == 6
+
+
+# --- IFC, optional ----------------------------------------------------------
+
+from planfgen.document.ifc import available, export_ifc  # noqa: E402
+
+ifc_only = pytest.mark.skipif(not available(), reason="ifcopenshell not installed")
+
+
+def test_export_ifc_says_so_when_it_cannot():
+    """The engine does not depend on ifcopenshell, so absence is not a crash."""
+    if available():
+        pytest.skip("ifcopenshell is installed here")
+    with pytest.raises(RuntimeError, match="optional"):
+        export_ifc(flat(), "unused.ifc")
+
+
+@ifc_only
+def test_ifc_carries_a_space_per_room_and_a_wall_per_solid(tmp_path: Path):
+    import ifcopenshell
+
+    fabric = flat()
+    target = tmp_path / "plan.ifc"
+    export_ifc(fabric, target)
+
+    model = ifcopenshell.open(str(target))
+    assert model.schema == "IFC4"
+    assert len(model.by_type("IfcSpace")) == len(fabric.spaces)
+    assert len(model.by_type("IfcWall")) == len(fabric.graph.walls)
+    for cls in ("IfcProject", "IfcSite", "IfcBuilding", "IfcBuildingStorey"):
+        assert len(model.by_type(cls)) == 1, cls
+
+
+@ifc_only
+def test_an_ifc_space_carries_the_net_area_not_the_axis_area(tmp_path: Path):
+    """The number the programme was written in, and a schedule checks against."""
+    import ifcopenshell
+    import ifcopenshell.util.element as element
+
+    fabric = flat()
+    target = tmp_path / "plan.ifc"
+    export_ifc(fabric, target)
+
+    model = ifcopenshell.open(str(target))
+    by_nom = {s.Name: s for s in model.by_type("IfcSpace")}
+    assert set(by_nom) == set(fabric.spaces)
+
+    for nom, space in fabric.spaces.items():
+        pset = element.get_psets(by_nom[nom])["Pset_SpaceCommon"]
+        assert pset["NetPlannedArea"] == pytest.approx(space.surface_utile, abs=1e-6)
+        assert pset["GrossPlannedArea"] == pytest.approx(
+            space.axis_polygon.area, abs=1e-6
+        )
+        assert pset["NetPlannedArea"] < pset["GrossPlannedArea"]
+
+
+@ifc_only
+def test_ifc_doors_are_deliberately_not_written(tmp_path: Path):
+    """A door without an IfcOpeningElement is a symbol beside a solid wall."""
+    from planfgen.document.ifc import export_ifc_openings
+
+    with pytest.raises(NotImplementedError, match="IfcOpeningElement"):
+        export_ifc_openings(tmp_path / "plan.ifc", None)
+
