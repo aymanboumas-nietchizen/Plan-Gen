@@ -15,7 +15,7 @@ from planfgen.habitability.furniture import FURNITURE, FurnitureSpec
 
 
 def fits(space_or_cell, spec: FurnitureSpec, profile: RegulationProfile | None = None) -> bool:
-    """True if `spec`'s rectangle fits inside the room's net rectangle.
+    """True if the room can hold `spec`'s rectangle AND be arranged around it.
 
     Pass `profile` for a `SpaceCell`, which cannot work out its own net
     dimensions; a `Space` already carries its net polygon and needs none.
@@ -24,7 +24,13 @@ def fits(space_or_cell, spec: FurnitureSpec, profile: RegulationProfile | None =
         space_or_cell.net_dims() if profile is None else space_or_cell.net_dims(profile)
     )
     short, long = (width, height) if width <= height else (height, width)
-    return short >= spec.min_side and long >= spec.min_long
+    if short <= 0:
+        return False
+    if short < spec.min_side or long < spec.min_long:
+        return False
+    # A minimum footprint has a floor but no ceiling: 0.92 x 5.17 clears a
+    # 0.90 x 1.40 WC twice over and is a corridor with a pan at one end.
+    return spec.max_ratio is None or long / short <= spec.max_ratio
 
 
 def fit_report(plan, profile: RegulationProfile) -> dict[str, bool]:

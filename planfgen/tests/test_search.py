@@ -63,13 +63,15 @@ W, H = 12.0, 10.0
 
 #: Calibrated against the seed tree: these are what the envelope delivers, so
 #: the reference plan is exact and the search has room to move either way.
+#: Re-calibrated when furniture gained a max proportion — the old SDB was
+#: 4.91 x 2.08, a bathroom five metres long, and the gate was right to refuse it.
 TARGETS = {
-    "Sejour": 33.8,
-    "Cuisine": 13.5,
-    "Ch1": 19.2,
-    "Ch2": 15.8,
-    "SDB": 10.2,
-    "Couloir": 8.0,
+    "Sejour": 32.13,
+    "Cuisine": 13.14,
+    "Ch1": 18.69,
+    "Ch2": 15.38,
+    "SDB": 13.14,
+    "Couloir": 8.00,
 }
 SPEC = [
     ("Sejour", RoomType.SEJOUR, O.S),
@@ -275,6 +277,22 @@ def test_gates_run_cheapest_first():
     assert AREA_TOLERANCE > 0
 
 
+def test_circulation_shape_is_gated_but_its_size_is_scored():
+    """A corridor leading nowhere is waste; how much corridor is a judgement."""
+    from planfgen.circulation import circulation_runs
+    from planfgen.evaluate.constraints import fabric_of
+
+    assert "circulation" in [g.name for g in GATES]
+
+    brief, graph = apartment_brief(), apartment_graph()
+    plan = seed_tree().realise(envelope_of(brief), brief, grid_for(brief))
+    report = circulation_runs(fabric_of(plan, brief))
+
+    assert report.runs and report.worst_stub == pytest.approx(0.0, abs=1e-9)
+    assert report.dead_ends(MA_PROFILE.corridor_clear) == []
+    assert 0.0 < score(plan, brief, graph).circulation < 1.0, "size still scores"
+
+
 def test_aspect_is_scored_not_gated():
     """CLAUDE.md lists compactness among the judgement calls, not the gates.
 
@@ -394,19 +412,33 @@ def test_anneal_with_no_iterations_returns_the_seed():
 
 
 def test_every_metric_varies():
-    """Fifty annealed results, and no metric may be stuck on fewer than five.
+    """At least fifty annealed candidates, and no metric stuck on fewer than five.
 
-    Diversity comes from independent seeds, not from longer runs — a longer run
-    converges harder and returns a *narrower* set of results. Ten runs of sixty
-    iterations is what the fixture needs; measured, not guessed.
+    The candidates are the ones a run *evaluates*, not the ten it keeps. That
+    distinction matters and cost a while to find: a good optimiser concentrates,
+    so the kept best-of-ten agree with each other on circulation and compacite
+    and show only three values between them. That is the optimiser working, not
+    a dead metric — and this test is about the metric. Sampling what the search
+    walks over answers the question that was being asked.
     """
     brief, graph = apartment_brief(), apartment_graph()
-    results = []
-    for seed in range(10):
-        results.extend(anneal(brief, seed_tree(), 60, seed=seed, graph=graph))
-    results = results[:50]
-    assert len(results) == 50
+    grid = grid_for(brief)
+    rng = random.Random(0)
 
+    results = []
+    tree = seed_tree()
+    for step in range(4000):
+        tree = mutate(tree, rng, grid)
+        candidate = evaluate(tree, brief, grid, graph, step)
+        if candidate is not None:
+            results.append(candidate)
+        elif rng.random() < 0.25:
+            tree = seed_tree()
+
+    # Every candidate found, not a slice of them. Taking a fixed-stride sample
+    # makes the result depend on which stride: fifty saw five orientations here
+    # and eighty saw four, which is luck rather than a property of anything.
+    assert len(results) >= 50, "the fixture must leave the search room to move"
     seen: dict[str, set[float]] = {k: set() for k in results[0].scores.as_dict()}
     for result in results:
         for name, value in result.scores.as_dict().items():
@@ -414,6 +446,18 @@ def test_every_metric_varies():
 
     for name, values in seen.items():
         assert len(values) >= 5, f"{name} took only {sorted(values)}"
+
+
+def test_the_kept_results_still_move():
+    """The best-of-ten converge, but they are not all one plan either."""
+    brief, graph = apartment_brief(), apartment_graph()
+    kept = []
+    for seed in range(10):
+        kept.extend(anneal(brief, seed_tree(), 60, seed=seed, graph=graph))
+    kept = kept[:50]
+
+    globales = {round(r.scores.globale, 9) for r in kept}
+    assert len(globales) >= 5, sorted(globales)
 
 
 def test_compacite_is_not_saturated_by_the_aspect_gate():

@@ -557,3 +557,47 @@ Next:     Nothing scheduled. If R+n or larger programmes are the direction, a mo
           inserts or removes a BandCut is now the highest-value single addition — it is
           what stands between the search and a plan for anything above ten rooms.
 
+## S16 — the two defects from the drawing review               2026-08-25
+Built:    `max_ratio` on `FurnitureSpec`; `circulation/shape.py` with `Run`,
+          `CirculationReport`, `circulation_runs`; `CIRCULATION_GATE`; run-per-room
+          folded into the circulation score. 243 tests pass, 1 skipped.
+Defect 1 — THE SLOT. A WC came back 5.17 x 0.92 and passed every gate, because
+          `fits` asked only `min(w,h) >= 0.90 and max(w,h) >= 1.40`. A minimum
+          footprint has a floor and no ceiling, so a corridor with a pan at one end
+          clears it twice over. `FurnitureSpec` now carries `max_ratio`; COULOIR alone
+          is `None`, because a corridor IS meant to be long. Specs added for CELLIER,
+          BUREAU and ENTREE, which had none and so were never checked at all — that is
+          why a 5.17 x 1.61 cellier went through.
+          This is a furniture constraint, not the aspect rule S9b took out of the gates.
+          CLAUDE.md gates furniture fit and scores compactness; whether a bed can be
+          ARRANGED in a room is the first question, not the second.
+Defect 2 — THE CUL-DE-SAC. `circulation` scored the area coefficient only, so a compact
+          hall and a spine running the depth of the building scored identically. Now
+          measured: `stub`, how far a corridor overruns its last door, and `per_room`,
+          metres of run for each room served. Stub is GATED at one clear width — beyond
+          that it is not turning space, it is corridor leading nowhere. Size stays
+          SCORED, half coefficient and half run-per-room.
+          On the plan that was reviewed: no stub, but 24.01 m of circulation at 2.18 m
+          per room, with the Entree running the full 14.90 m depth. The stub was zero
+          and the waste was real, which is why both numbers are needed.
+Fixtures: BOTH NEW GATES CAUGHT DEFECTS IN MY OWN FIXTURES, which is the point of them.
+          The reference apartment had an SDB of 4.91 x 2.08 — a bathroom five metres
+          long — recalibrated to 5.13 x 2.56. `test_gates`' spine flat had a chambre at
+          2.21 and an SDB at 2.67; a 6.40 m wide room needs 3.20 m of depth to stay
+          inside 2:1 and that does not go into a 9.00 m envelope three times, so it is
+          11.00 now.
+Also:     `test_every_metric_varies` was measuring the OPTIMISER, not the metric. A good
+          search concentrates, so the kept best-of-ten agreed on circulation and
+          compacite and showed three values between them. It now samples what a run
+          EVALUATES rather than what it keeps, and asserts over every candidate found
+          instead of a fixed-stride slice — a 50-sample saw five orientations and an
+          80-sample saw four, which is luck, not a property.
+Warning:  THE 14-ROOM VILLA NO LONGER PRODUCES A VALID PLAN. Neither a larger parcel
+          nor a third corridor arm recovers it: `calibrate` scales the rooms with the
+          parcel, so every RATIO is unchanged — proportion is a property of the topology,
+          not of size. Thirteen rooms chained along corridor arms are strips whatever
+          the envelope. This is the same limit as S15 seen from the other side, and it
+          is now a hard refusal rather than a bad-looking drawing.
+Next:     Regulations to encode when they arrive. After that, non-rectangular parcels
+          (rectilinear decomposition), then a move that inserts a BandCut.
+

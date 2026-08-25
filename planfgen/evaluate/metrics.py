@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 
 from planfgen.brief.plan import Brief
 from planfgen.brief.programme import Orientation
+from planfgen.circulation.shape import circulation_runs
 from planfgen.evaluate.constraints import fabric_of
 from planfgen.topology.relations import ProgrammeGraph, RelationType
 
@@ -28,6 +29,15 @@ W_COMPACITE = 0.15
 #: Circulation is free up to this coefficient and worthless above the next one.
 CIRC_FREE = 0.10
 CIRC_SPAN = 0.15
+
+#: Metres of circulation run per room served. A hall reaching five rooms in six
+#: metres is not the same plan as a corridor reaching five in fifteen, and until
+#: this was measured the two scored identically — see `circulation/shape.py`.
+RUN_FREE = 1.50
+RUN_SPAN = 2.50
+
+#: How the two halves of the circulation score are weighted against each other.
+W_COEFFICIENT = 0.5
 
 #: The aspect ratio a room is measured against. This is deliberately NOT the
 #: 2.5 the aspect gate enforces. Scoring `min(1, 2.5 / ratio)` would saturate at
@@ -157,13 +167,24 @@ def facings(fabric) -> dict[str, Orientation | None]:
 
 
 def circulation(plan, brief: Brief) -> float:
-    """Full marks up to a 10% circulation coefficient, nothing by 25%.
+    """How much circulation, and how hard it is working.
 
-    The coefficient is a result, never an input — ARCHITECTURE section 4. This
-    scores it rather than letting the programme ask for it.
+    Area alone is not enough. A compact hall and a spine running the depth of
+    the building can hold the same square metres, and the coefficient cannot
+    tell them apart — so half the score is metres of run per room served, which
+    can. Full marks up to 1.50 m per room, nothing by 4.00.
+
+    The coefficient is still a result and never an input (ARCHITECTURE section
+    4); so is the run.
     """
     coefficient = plan.circulation_coefficient(brief.profile)
-    return 1.0 - _clamp((coefficient - CIRC_FREE) / CIRC_SPAN)
+    by_area = 1.0 - _clamp((coefficient - CIRC_FREE) / CIRC_SPAN)
+
+    report = circulation_runs(fabric_of(plan, brief))
+    if not report.runs:
+        return by_area
+    by_run = 1.0 - _clamp((report.per_room - RUN_FREE) / RUN_SPAN)
+    return W_COEFFICIENT * by_area + (1.0 - W_COEFFICIENT) * by_run
 
 
 def compacite(plan, brief: Brief) -> float:
@@ -212,6 +233,7 @@ def score(plan, brief: Brief, graph: ProgrammeGraph | None = None) -> Scores:
             + W_COMPACITE * comp
         ),
         details={
+            "circulation_runs": circulation_runs(fabric_of(plan, brief)).explain(),
             "adjacences": adj_detail,
             "orientation": orient_detail,
             "circulation_coefficient": plan.circulation_coefficient(brief.profile),

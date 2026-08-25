@@ -98,12 +98,13 @@ def bedroom_behind_the_bathroom():
 def spine_flat():
     """A left-hand spine with three rooms opening straight onto it.
 
-    Depths are chosen so the furniture actually fits: the sejour needs 3.00 m
-    of clear width, which a 3.00 m bay does not give once its walls are taken
-    off, so it gets 3.40.
+    Depths are chosen so the furniture actually fits — and since furniture
+    gained a maximum proportion, "fits" now means the rooms are not passages
+    either. A 6.40 m wide chambre needs 3.20 m of depth to stay inside 2:1,
+    which does not go into a 9.00 m envelope three times over. Hence 11.00.
     """
     return hand_built(
-        outline=[(0, 0), (8, 0), (8, 9), (0, 9)],
+        outline=[(0, 0), (8, 0), (8, 11), (0, 11)],
         edge_kinds=[
             EdgeType.STREET,
             EdgeType.MITOYEN,
@@ -111,10 +112,10 @@ def spine_flat():
             EdgeType.MITOYEN,
         ],
         rooms=[
-            ("Couloir", RoomType.COULOIR, 10.0),
-            ("SDB", RoomType.SDB, 15.0),
-            ("Chambre", RoomType.CHAMBRE, 18.0),
-            ("Sejour", RoomType.SEJOUR, 20.0),
+            ("Couloir", RoomType.COULOIR, 12.0),
+            ("SDB", RoomType.SDB, 20.0),
+            ("Chambre", RoomType.CHAMBRE, 24.0),
+            ("Sejour", RoomType.SEJOUR, 23.0),
         ],
         cells=SPINE_CELLS(),
     )
@@ -151,10 +152,10 @@ def stranded_flat():
 
 def SPINE_CELLS():
     return [
-        cell("Couloir", 0.0, 0.0, 1.4, 9.0, F, C, F, F),
-        cell("SDB", 1.4, 0.0, 6.6, 2.6, C, F, F, C),
-        cell("Chambre", 1.4, 2.6, 6.6, 3.0, C, F, C, C),
-        cell("Sejour", 1.4, 5.6, 6.6, 3.4, C, F, C, F),
+        cell("Couloir", 0.0, 0.0, 1.4, 11.0, F, C, F, F),
+        cell("SDB", 1.4, 0.0, 6.6, 3.4, C, F, F, C),
+        cell("Chambre", 1.4, 3.4, 6.6, 3.9, C, F, C, C),
+        cell("Sejour", 1.4, 7.3, 6.6, 3.7, C, F, C, F),
     ]
 
 
@@ -293,8 +294,8 @@ def test_fit_report_covers_a_fabric_plan_and_a_partition_plan():
     # The same rooms as cells, which need the profile to work out their net.
     plan = PartitionPlan(
         cells=SPINE_CELLS(),
-        grid=StructuralGrid.from_span(8.0, 9.0),
-        envelope_rect=(0.0, 0.0, 8.0, 9.0),
+        grid=StructuralGrid.from_span(8.0, 11.0),
+        envelope_rect=(0.0, 0.0, 8.0, 11.0),
         brief=fabric_brief(),
     )
     cell_report = fit_report(plan, P)
@@ -305,14 +306,14 @@ def test_fit_report_covers_a_fabric_plan_and_a_partition_plan():
 def fabric_brief() -> Brief:
     programme = Programme(
         [
-            RoomSpec("Couloir", RoomType.COULOIR, 10.0, "#888888"),
-            RoomSpec("SDB", RoomType.SDB, 15.0, "#888888"),
-            RoomSpec("Chambre", RoomType.CHAMBRE, 18.0, "#888888"),
-            RoomSpec("Sejour", RoomType.SEJOUR, 20.0, "#888888"),
+            RoomSpec("Couloir", RoomType.COULOIR, 12.0, "#888888"),
+            RoomSpec("SDB", RoomType.SDB, 20.0, "#888888"),
+            RoomSpec("Chambre", RoomType.CHAMBRE, 24.0, "#888888"),
+            RoomSpec("Sejour", RoomType.SEJOUR, 23.0, "#888888"),
         ]
     )
     parcel = Parcel(
-        outline=Polygon([(0, 0), (8, 0), (8, 9), (0, 9)]),
+        outline=Polygon([(0, 0), (8, 0), (8, 11), (0, 11)]),
         edges=[EdgeSpec(i, EdgeType.STREET) for i in range(4)],
         north=0.0,
         entry_edge=0,
@@ -321,9 +322,11 @@ def fabric_brief() -> Brief:
 
 
 def test_a_room_with_no_spec_always_fits():
+    """Only a terrasse now. The cellier, bureau and entree gained specs when
+    the WC came back 5.17 x 0.92 and nothing was checking them."""
     fabric = spine_flat()
-    fabric.spaces["SDB"].kind = RoomType.CELLIER
-    assert RoomType.CELLIER not in FURNITURE
+    fabric.spaces["SDB"].kind = RoomType.TERRASSE
+    assert RoomType.TERRASSE not in FURNITURE
     assert fit_report(fabric, P)["SDB"] is True
 
 

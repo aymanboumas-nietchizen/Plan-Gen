@@ -32,6 +32,7 @@ from typing import Callable, Protocol
 
 from planfgen.brief.plan import Brief
 from planfgen.circulation.reachable import reachable
+from planfgen.circulation.shape import circulation_runs
 from planfgen.habitability.check import fit_report
 
 #: How far a room's net area may miss its target and still be a plan, as a
@@ -105,6 +106,21 @@ def _minima_ok(plan, brief: Brief) -> bool:
     return True
 
 
+def _circulation_ok(plan, brief: Brief) -> bool:
+    """No corridor may run past its last door by more than its own width.
+
+    A little overrun is turning space. More than that is corridor leading
+    nowhere, and it is the one circulation fault that is not a matter of
+    degree — the metres are simply wasted. How *much* circulation a plan spends
+    is a judgement call and stays in `metrics.py`.
+    """
+    try:
+        report = circulation_runs(fabric_of(plan, brief))
+    except (ValueError, KeyError):
+        return False
+    return not report.dead_ends(brief.profile.corridor_clear)
+
+
 def _reachable_ok(plan, brief: Brief) -> bool:
     try:
         return reachable(fabric_of(plan, brief)).ok
@@ -117,6 +133,7 @@ AREA_GATE = _Gate("area", _areas_ok)
 ASPECT_GATE = _Gate("aspect", _aspects_ok)
 FURNITURE_GATE = _Gate("furniture", _furniture_ok)
 MIN_AREA_GATE = _Gate("min_area", _minima_ok)
+CIRCULATION_GATE = _Gate("circulation", _circulation_ok)
 REACHABLE_GATE = _Gate("reachable", _reachable_ok)
 
 #: The gates a candidate must pass, cheapest first. REACHABLE_GATE is last
@@ -129,6 +146,7 @@ GATES: tuple[Gate, ...] = (
     AREA_GATE,
     MIN_AREA_GATE,
     FURNITURE_GATE,
+    CIRCULATION_GATE,
     REACHABLE_GATE,
 )
 
