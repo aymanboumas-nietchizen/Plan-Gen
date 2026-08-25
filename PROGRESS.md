@@ -481,3 +481,44 @@ Next:     Nothing scheduled. PROMPTS.md lists four follow-ons in value order: R+
           are the highest-value thing to verify — S9b showed they decide whether a brief
           is buildable at all.
 
+## S14 — audit: the placeholder tables, and the studio          2026-08-25
+Built:    `table_conflicts()` in `habitability/check.py` with `TableConflict`; 3 tests
+          in `test_gates.py` pinning the disagreements; 4 AppTest tests in
+          `test_studio.py`. 238 tests pass, 1 skipped.
+Audit 1 — DO THE TWO TABLES AGREE? Three disagreements, one of them a contradiction:
+          * WC: min_area says 1.20 m2 is legal; FURNITURE says the pan and its approach
+            need 0.90 x 1.40 = 1.26 m2. A WC BUILT EXACTLY TO THE MINIMUM IS LEGAL ON
+            AREA AND HAS NOWHERE TO PUT THE FIXTURE. Only the WC has this problem.
+          * CHAMBRE: min_width 2.70 against a furniture min_side of 2.40.
+          * WC: min_width 1.20 against a furniture min_side of 0.90.
+          The width pair are preferences, not contradictions — min_width is no longer
+          gated (S9b) so nothing breaks, but the two files disagree about the same room.
+          corridor_clear 1.20 and FURNITURE[COULOIR].min_side 1.20 agree.
+Audit 2 — WHICH NUMBERS DECIDE BUILDABILITY? Measured over 700 mutations with the
+          programme RECALIBRATED to each profile, so the area gate does not mask the
+          shape gates behind it. Pass rate at -20% / +20%:
+            FURNITURE table    14.3% -> 0.0%   swing 14.3 pp   <- most load-bearing
+            cloison_t (0.10)   10.1% -> 0.0%   swing 10.1 pp
+            corridor_clear     0.0% -> 10.1%   swing 10.1 pp
+            facade_t (0.30)    10.4% -> 10.1%  swing 0.3 pp
+            porteur_t, door_leaf, door_jamb, min_area: 0.0 pp
+          TIGHTENING THE FURNITURE TABLE BY 20% MAKES NOTHING BUILDABLE. min_area moves
+          nothing because this fixture's rooms are 10-34 m2 against minima of 1.2-12 —
+          the minima never bind. Verify `habitability/furniture.py` FIRST.
+Method:   The first version of this measurement was wrong twice and both are worth
+          remembering. (1) Without recalibration the AREA gate rejects everything on any
+          profile change, so every other table read 0.0 pp. (2) Patching FURNITURE by
+          rebinding the module global does not reach `check.py`, which holds its own
+          reference from a `from ... import` — the dict has to be mutated in place. The
+          FURNITURE row read 0.0 pp until that was fixed.
+Studio:   It IS drivable from here — booted headless on :8899, clicked Generer through
+          the browser, all four tabs rendered and L8 wrote studio.dxf and the preview.
+          But a browser click is not a test that survives, so the coverage is
+          `streamlit.testing.v1.AppTest`: runs the script headlessly, no server and no
+          browser, 4 tests in 2.2 s. They assert the budget appears before the button,
+          that generating yields exactly the four stage tabs, that the metrics are real,
+          and that an infeasible brief errors and stops instead of generating.
+Not done: NOTHING HERE VERIFIES THE NUMBERS AGAINST MOROCCAN REGULATION. That needs a
+          document this repo does not have. What is now known is which numbers matter
+          and where the two files contradict each other.
+

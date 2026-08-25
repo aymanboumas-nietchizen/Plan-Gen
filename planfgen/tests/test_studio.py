@@ -75,3 +75,72 @@ def test_the_two_views_are_not_the_same_picture():
     assert "<circle" in graph_view and "<circle" not in plan_view
     assert "<rect" in plan_view
     assert graph_view != plan_view
+
+
+# --- the app itself ---------------------------------------------------------
+
+streamlit = pytest.importorskip("streamlit", reason="the studio is an optional extra")
+
+from pathlib import Path  # noqa: E402
+
+from streamlit.testing.v1 import AppTest  # noqa: E402
+
+APP = str(Path(__file__).parent.parent / "studio" / "app.py")
+
+
+def run_app(timeout: float = 120.0) -> AppTest:
+    """The app, run headlessly. No browser, no server, no clicking."""
+    app = AppTest.from_file(APP, default_timeout=timeout)
+    app.run()
+    return app
+
+
+def test_the_app_runs_and_shows_the_budget_before_generating():
+    """A brief that cannot be built is not a generation problem, so the budget
+    is on the page before the button is."""
+    app = run_app()
+
+    assert not app.exception, app.exception
+    assert any("gross" in block.value and "habitable" in block.value
+               for block in app.code), "the feasibility budget"
+    assert app.button, "the Generer button"
+    assert not app.tabs, "nothing is generated until it is asked for"
+
+
+def test_generating_produces_the_four_stages():
+    """THE stage selector: one run, shown at L1, L2, L3 and L8."""
+    app = run_app()
+    app.button[0].click().run()
+
+    assert not app.exception, app.exception
+    labels = [tab.label for tab in app.tabs]
+    assert labels == ["L1 Topologie", "L2 Partition", "L3 Fabrique", "L8 Dessin"]
+
+
+def test_the_run_reports_real_metrics():
+    app = run_app()
+    app.button[0].click().run()
+
+    assert not app.exception, app.exception
+    metrics = {m.label: m.value for m in app.metric}
+    assert set(metrics) == {
+        "Global",
+        "Adjacences",
+        "Orientation",
+        "Circulation",
+        "Erreur surface",
+    }
+    assert 0.0 < float(metrics["Global"]) <= 1.0
+    assert float(metrics["Erreur surface"].rstrip(" %")) < 5.0
+
+
+def test_an_infeasible_brief_stops_before_generating():
+    """It says so and stops, rather than generating something impossible."""
+    app = AppTest.from_file(APP, default_timeout=120.0)
+    app.run()
+    app.number_input[0].set_value(7.0).run()   # width
+    app.number_input[1].set_value(7.0).run()   # depth
+
+    assert not app.exception, app.exception
+    assert app.error, "an infeasible brief is an error, not a warning"
+    assert not app.tabs

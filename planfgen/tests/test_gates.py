@@ -349,3 +349,47 @@ def test_fits_on_a_real_space_is_also_cheap():
         fits(space, spec)
     elapsed = time.perf_counter() - start
     assert elapsed < 1.0, f"{elapsed:.3f}s for 100k calls"
+
+
+# --- where the two placeholder tables disagree ------------------------------
+
+
+def test_the_regulation_and_furniture_tables_are_audited_not_assumed():
+    """Both files carry placeholder numbers written from different sources.
+
+    This pins the disagreements that exist today. If someone corrects a value,
+    this test tells them what their change did — which is the point of having
+    the audit at all. It does not decide who is right.
+    """
+    from planfgen.habitability import table_conflicts
+
+    conflicts = {(c.kind, c.issue) for c in table_conflicts(P)}
+    assert conflicts == {
+        (RoomType.CHAMBRE, "width"),
+        (RoomType.WC, "area"),
+        (RoomType.WC, "width"),
+    }
+
+
+def test_a_wc_at_the_code_minimum_cannot_hold_its_own_furniture():
+    """The one contradiction that is a contradiction, not a preference.
+
+    min_area says a WC may be 1.20 m2. FURNITURE says the pan and its approach
+    need 0.90 x 1.40 = 1.26 m2. A WC built exactly to the minimum is legal on
+    area and has nowhere to put the fixture.
+    """
+    spec = FURNITURE[RoomType.WC]
+    assert P.min_area[RoomType.WC] == 1.20
+    assert spec.min_side * spec.min_long == pytest.approx(1.26)
+    assert spec.min_side * spec.min_long > P.min_area[RoomType.WC]
+
+    at_the_minimum = _Room(1.00, 1.20)  # 1.20 m2, exactly legal
+    assert fits(at_the_minimum, spec) is False
+
+
+def test_no_other_room_has_that_problem():
+    """Only the WC. Every other minimum leaves room for its own furniture."""
+    from planfgen.habitability import table_conflicts
+
+    areas = [c.kind for c in table_conflicts(P) if c.issue == "area"]
+    assert areas == [RoomType.WC]
