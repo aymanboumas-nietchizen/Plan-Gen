@@ -749,3 +749,33 @@ Note:     `planfgen.search` re-exports `anneal` the function, which shadows `ann
           constants are unreachable. Cost an hour of wrong measurements. Use
           `sys.modules`. The studio still does not call `fit_brief`.
 Next:     S16 — rectilinear parcels: decompose, then slice each rectangle.
+
+---
+
+## S16 — What the green suite was hiding (no engine code)     2026-08-27
+
+Built:    `tools/probe_ceiling.py`, and two agents in `.claude/agents/` —
+          `planfgen-qa` (measures, may not edit the layer packages) and
+          `planfgen-product` (studio, Streamlit question, Finch).
+Measured: 313 tests pass, and they prove less than they look. `test_search.py`
+          is FIVE rooms and a spine with `TARGETS` hand-calibrated to that exact
+          envelope and tree; every green test downstream inherits that shape.
+          Driven the way the STUDIO drives it — round numbers, generous parcel,
+          `fit_brief`, the studio's own `seed_tree`, 6 seeds x 300 iters —
+          5 rooms 6/6 at 0.814, and 6 THROUGH 13 ROOMS ALL 0/6. `furniture`
+          dominates every refusal (~1000 vs ~750 for area).
+Result:   The 9-cell ceiling of S16-S18 is PATH-DEPENDENT. It came from the
+          search's own moves off a shaped seed and does not survive the entry
+          path a user actually has. Suspects: `max_ratio = 3.0` (invented, still
+          standing in for ART. 4), and `seed_tree` building a degenerate comb.
+Bug:      4 rooms crashes — `fit_footprint`'s secant diverges rather than
+          brackets: "no footprint under 3351830.7 m2 delivers the 64.00 m2".
+Found:    S18's fixtures cannot use the `tests/fixtures/` format — it is
+          `{envelope, programme, adjacencies}`, a BRIEF, with no geometry, and
+          all four S18 measurements need geometry. Use the `to_gh_json` schema
+          instead: it already carries per-space `x,y,w,h`, `net_outline`,
+          `surface_utile` AND `axis_area`, so one `measure_reference.py` reads
+          real plans and engine output alike.
+Next:     Repo moves to the agence for DXF reference plans. Either fix the
+          4-room crash, or sweep `max_ratio` against the ceiling — QA first,
+          then a repair session.
