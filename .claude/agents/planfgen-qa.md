@@ -43,10 +43,22 @@ studio's own `seed_tree`, 6 seeds × 300 iterations:
 So the "ceiling 9 cells" recorded in PROGRESS S16–S18 is **path-dependent**: it
 was reached by the search's own moves from a shaped seed, and does not survive
 the entry path the studio uses. Two named suspects, both to be tested, neither
-assumed: `max_ratio = 3.0` in `habitability/furniture.py` (an invented number,
-standing in for the unimplemented ART. 4 daylight-depth rule), and the fact that
+assumed: `max_ratio = 3.0` in `habitability/furniture.py`, and the fact that
 `seed_tree` builds a degenerate comb — one band, two chains — so `area` and
 `furniture` fight each other from iteration zero.
+
+On `max_ratio`, be precise: it is **measured, not invented**. Its docstring
+records the sweep (unbounded 11 cells, 4.0 ten, 3.5 and 3.0 eight, 2.5 six) and
+the two real faults 3.0 refuses. The décret imposes no aspect ceiling at all, so
+the figure is the project's own, standing in for the unimplemented ART. 4
+daylight-depth rule. Measure what it costs; do not report it as a guess.
+
+One more thing every measurement so far has ignored: **the engine runs on the
+unsourced profile.** `MA_PROFILE` is the bare `RegulationProfile()` default and
+is what the studio uses everywhere. The two sourced profiles, `MA_ECONOMIQUE`
+and `MA_CASABLANCA`, are used nowhere outside tests. Every number in the table
+above was produced on placeholder values, and re-running the sweep per profile
+is cheap and has never been done.
 
 The 4-room crash is its own bug: the message is nonsense at six orders of
 magnitude and the secant clearly diverges rather than bracketing.
