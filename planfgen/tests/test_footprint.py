@@ -49,7 +49,15 @@ from planfgen.evaluate import (
     REACHABLE_GATE,
     facings,
 )
-from planfgen.partition import BandCut, Cut, Direction, Leaf, SlicingTree
+from planfgen.partition import (
+    BandCut,
+    Cut,
+    Direction,
+    EnvelopeTooTight,
+    Leaf,
+    SlicingTree,
+    UnrealisableTree,
+)
 from planfgen.search import envelope_of, grid_for
 
 P = MA_PROFILE
@@ -455,3 +463,121 @@ def test_fitting_does_not_change_what_a_calibrated_brief_generates():
     after = anneal(fitted, seed_tree(), 200, seed=3, graph=apartment_graph())
     assert len(after) == len(before) > 0
     assert after[0].scores.globale == pytest.approx(before[0].scores.globale, rel=0.02)
+
+
+# --- a tree the programme cannot support ------------------------------------
+#
+# 2026-08-28. `tools/probe_ceiling.py` crashed at four rooms with "no footprint under
+# 3351830.7 m2 delivers the 64.00 m2 demanded". Nothing about that sentence was
+# true. The four-room programme has no circulation room — `Couloir` is the fifth
+# entry of the catalog — and the seed built a `BandCut` anyway, so `realise`
+# raised "more bands than spare circulation rooms" at *every* area. `_bracket`
+# read every `ValueError` as "too small", grew the bracket by 1.3 forty times
+# over, and reported 1.45 x 64 x 1.3^40 as a site failure. These pin the two
+# halves: the failure is now typed, and the bracket only grows for the one
+# failure a bigger footprint can fix.
+
+
+def bandless_programme() -> Programme:
+    """Four rooms and no corridor — `CATALOG[:4]` of the ceiling probe."""
+    return Programme(
+        [
+            RoomSpec("Sejour", RoomType.SEJOUR, 30.0, "#888888"),
+            RoomSpec("Cuisine", RoomType.CUISINE, 12.0, "#888888"),
+            RoomSpec("Ch1", RoomType.CHAMBRE_PRINCIPALE, 16.0, "#888888"),
+            RoomSpec("SDB", RoomType.SDB, 6.0, "#888888"),
+        ]
+    )
+
+
+def banded_pairs() -> SlicingTree:
+    """Two rooms, spine, two rooms — what the studio's `seed_tree` returns."""
+    return SlicingTree(
+        BandCut(
+            Direction.V,
+            (
+                Cut(Direction.H, False, (Leaf("Sejour"), Leaf("Cuisine"))),
+                Cut(Direction.H, False, (Leaf("Ch1"), Leaf("SDB"))),
+            ),
+        )
+    )
+
+
+def counting_delivered():
+    """A context-free counter over `FP.delivered`, returned as (calls, restore)."""
+    calls: list[int] = []
+    real = FP.delivered
+    FP.delivered = lambda *a, **k: (calls.append(1), real(*a, **k))[1]
+    return calls, lambda: setattr(FP, "delivered", real)
+
+
+def test_a_band_nobody_can_name_is_refused_at_once_not_after_forty_doublings():
+    calls, restore = counting_delivered()
+    try:
+        with pytest.raises(UnrealisableTree) as caught:
+            fit_footprint(bandless_programme(), parcel(14.0, 11.2), P,
+                          banded_pairs(), aspect=1.25)
+    finally:
+        restore()
+
+    message = str(caught.value)
+    assert "spare circulation rooms" in message
+    assert "1 band(s), 0 spare name(s)" in message, "say what it counted"
+    assert len(calls) == 1, f"{len(calls)} realises to learn an area-free fact"
+    assert "3351830" not in message and "footprint under" not in message
+
+
+def test_the_same_four_rooms_solve_once_the_spine_is_an_ordinary_cut():
+    """The input was invalid, not the solver. Give the tree no band and it fits."""
+    prog = bandless_programme()
+    plain = SlicingTree(
+        Cut(
+            Direction.V,
+            False,
+            (
+                Cut(Direction.H, False, (Leaf("Sejour"), Leaf("Cuisine"))),
+                Cut(Direction.H, False, (Leaf("Ch1"), Leaf("SDB"))),
+            ),
+        )
+    )
+    site = parcel(14.0, 11.2)
+    fp = fit_footprint(prog, site, P, plain, aspect=1.25)
+    assert delivered(fp, prog, site, P, plain) == pytest.approx(64.0, abs=FP.FIT_TOL)
+    assert fp.within(site)
+
+
+def test_the_bracket_grows_only_for_the_failure_a_bigger_footprint_fixes():
+    """`EnvelopeTooTight` is an undershoot; `UnrealisableTree` is not."""
+    tried: list[float] = []
+
+    def too_tight_below_400(area: float) -> float:
+        tried.append(area)
+        if area < 400.0:
+            raise EnvelopeTooTight("a 2.000 m run cannot host 0.20 m of wall")
+        return area / 5.0 - 80.0
+
+    lo, hi, f_hi = FP._bracket(too_tight_below_400, 80.0)
+    assert lo < 400.0 <= hi and f_hi > 0, "it grew past the tight envelopes"
+    assert len(tried) > 1
+
+    refused: list[float] = []
+
+    def never_nameable(area: float) -> float:
+        refused.append(area)
+        raise UnrealisableTree("the tree has more bands than it has spare "
+                               "circulation rooms to name them")
+
+    with pytest.raises(UnrealisableTree):
+        FP._bracket(never_nameable, 80.0)
+    assert len(refused) == 1, "no area answers it, so no area is tried twice"
+
+
+def test_a_bracket_that_runs_out_reports_what_it_measured():
+    """The old message guessed — "probably spending everything on walls" — and
+    guessed wrong about the only case that ever reached it."""
+    with pytest.raises(ValueError) as caught:
+        FP._bracket(lambda area: 40.0 - 80.0, 80.0)
+    message = str(caught.value)
+    assert "40.00 m2" in message, "the delivery it actually measured"
+    assert "the constraint is the tree, not the site" in message
+    assert "probabl" not in message

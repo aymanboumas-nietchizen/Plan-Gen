@@ -10,11 +10,10 @@ engine stops.
 
 This probe drives the path the *studio* drives: a round-number programme, a
 generous parcel, `fit_brief` to solve the footprint, and the studio's own
-`seed_tree`. Measured 2026-08-27:
+`seed_tree`. Measured 2026-08-28, and 5 through 13 unchanged from 2026-08-27:
 
     rooms  ok/seeds    best    top refusals
-        4  crash             fit_footprint: "no footprint under 3351830.7 m2
-                             delivers the 64.00 m2 demanded"
+        4  6/6       0.843   -       (was a crash; see below)
         5  6/6       0.814   -
         6  0/6       -       furniture=1033, area=756
         7  0/6       -       furniture=1211, area=588
@@ -32,20 +31,32 @@ entry path the studio uses. `furniture` dominates every refusal. Note that
 docstring carries the sweep — but it is the project's own figure standing in for
 the unimplemented ART. 4 daylight-depth rule.
 
-The 4-room crash is a separate bug: the secant in `fit_footprint` diverges by
-six orders of magnitude instead of bracketing.
+THE 4-ROOM CRASH WAS AN INVALID INPUT, NOT A DIVERGING SECANT. `CATALOG[:4]`
+has no circulation room — `Couloir` is the fifth entry — and `seed_tree` built a
+`BandCut` anyway, so `realise` raised "more bands than spare circulation rooms"
+at every area. `fit_footprint`'s bracket read that as "the footprint is too
+small", grew it by 1.3 forty times and reported 1.45 x 64 x 1.3^40 = 3351830.7
+as a site failure. Fixed 2026-08-28 on both sides: the tree refuses an
+unnameable band before any geometry (`UnrealisableTree`), the bracket grows only for the one
+failure a larger footprint can fix (`EnvelopeTooTight`), and `seed_tree` here
+builds a band only when there is a name for it. THE CEILING DID NOT MOVE: 5
+through 13 are identical, to the refusal count, before and after.
+
+The 4-room row's `best` is not comparable with the rows below it. A programme
+with no circulation room has no hub to relate anything to, so its graph is empty
+and `adjacences` returns 1.0 by vacuity — 0.843 is inflated by that term.
 
 THE CEILING IS STRUCTURAL, NOT REGULATORY. Run across all three profiles
-2026-08-27 — the placeholder `MA_PROFILE`, plus the two sourced ones that the
-studio has never used:
+2026-08-27, re-run 2026-08-28 — the placeholder `MA_PROFILE`, plus the two
+sourced ones that the studio has never used:
 
-    profile      corridor_clear  daylight  5 rooms   6-13 rooms
-    placeholder      1.20         0.1250   6/6 0.814   all 0/6
-    economique       0.80         0.1000   6/6 0.831   all 0/6
-    casablanca       0.90         0.1667   6/6 0.831   all 0/6
+    profile      corridor_clear  daylight  4 rooms   5 rooms   6-13 rooms
+    placeholder      1.20         0.1250   6/6 0.843  6/6 0.814   all 0/6
+    economique       0.80         0.1000   6/6 0.843  6/6 0.831   all 0/6
+    casablanca       0.90         0.1667   6/6 0.843  6/6 0.831   all 0/6
 
-Identical ceiling, identical crash, `furniture` dominant throughout. So the
-placeholder numbers are not what caps the engine, and no amount of sourcing
+Identical ceiling, `furniture` dominant throughout. So the placeholder
+numbers are not what caps the engine, and no amount of sourcing
 regulation will lift it. Two things the sweep also shows:
 
   - the sourced profiles trade one refusal for another rather than reducing
@@ -127,12 +138,21 @@ def seed_tree(programme: Programme) -> SlicingTree:
     Copied from `studio/app.py` deliberately. If a better tree lifts the
     ceiling, the finding is that seeding is unsolved, not that the search is
     weak, and that is worth knowing separately.
+
+    ONE DIVERGENCE, added 2026-08-28: the spine is a band only when the
+    programme has a circulation room to name it. `CATALOG[:4]` has none — `Couloir` is the fifth
+    entry — and a band nobody can name is a tree no envelope can realise, so the
+    studio's unconditional `BandCut` made the four-room row an invalid input
+    rather than a measurement. `studio/app.py` has the same hole and guards only
+    `len(rooms) < 2`; that is a bug for `planfgen-product`, not one to reach in
+    and fix from here.
     """
     rooms = [r.nom for r in programme.rooms if not r.kind.is_circulation]
     half = max(1, len(rooms) // 2)
-    return SlicingTree(
-        BandCut(Direction.V, (_chain(rooms[:half]), _chain(rooms[half:])))
-    )
+    halves = (_chain(rooms[:half]), _chain(rooms[half:]))
+    if programme.circulation_rooms:
+        return SlicingTree(BandCut(Direction.V, halves))
+    return SlicingTree(Cut(Direction.V, False, halves))
 
 
 def build(n: int, profile: RegulationProfile = MA_PROFILE) -> tuple[Brief, SlicingTree, ProgrammeGraph]:
@@ -163,12 +183,21 @@ def build(n: int, profile: RegulationProfile = MA_PROFILE) -> tuple[Brief, Slici
     )
     brief = Brief(programme, parcel, profile, check_feasibility(programme, parcel, profile))
     tree = seed_tree(programme)
+    # Everything connects to the corridor — when there is one. Naming `Couloir`
+    # unconditionally scored the four-room row 0.0 on adjacency for relations to
+    # a room that is not in its programme. A programme with no circulation room
+    # states no adjacency requirement, so it gets none, and `adjacences` returns
+    # 1.0 by vacuity: the four-room `best` is therefore NOT comparable with the
+    # rows below it on that term.
+    hub = next((room.nom for room in programme.circulation_rooms), None)
     graph = ProgrammeGraph(
         [
-            Relation("Couloir", room.nom, RelationType.CONNECTED, 2.0)
+            Relation(hub, room.nom, RelationType.CONNECTED, 2.0)
             for room in programme.rooms
             if not room.kind.is_circulation
         ]
+        if hub
+        else []
     )
     return brief, tree, graph
 

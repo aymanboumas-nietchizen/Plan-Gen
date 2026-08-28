@@ -807,3 +807,21 @@ Fixed:    The docstring claim that `max_ratio = 3.0` is invented. It is measured
           `planfgen-qa` brief and is corrected there too.
 Next:     `planfgen-engine`, not `planfgen-regs`. The 4-room crash first, then
           whether `seed_tree`'s degenerate comb is the actual ceiling.
+
+---
+
+## S18 — The 4-room crash: an invalid input, not a diverging secant  2026-08-28
+Found:    `CATALOG[:4]` has no circulation room, `seed_tree` built a `BandCut`
+          anyway, so `realise` refused it AT EVERY AREA. `_bracket` read every
+          `ValueError` as "too small", grew 1.3^40, blamed a 3.35M m2 site.
+Built:    `UnrealisableTree`/`EnvelopeTooTight` + `band_names`/`check_nameable`
+          in `partition/tree.py`, checked before any geometry; `_bracket` grows
+          only for `EnvelopeTooTight` and reports what it measured; `anneal`'s
+          `band_budget` is the real spare-name count, not `max(1, ...)`.
+Proves:   322 pass / 1 skip. Sweep of 18 solves: wall-heavy briefs need ratios
+          to 2.19, so the bracket DOES grow, and every residual is under 1e-9.
+Decided:  THE CEILING DID NOT MOVE — 5-13 identical to the refusal count on all
+          three profiles. Only the 4-room row is new (6/6 0.843, its adjacency
+          term 1.0 by vacuity, so not comparable with the rows below).
+Next:     `seed_tree` (queue 2). `studio/app.py` has the same unnameable-band
+          hole, guarding only `len(rooms) < 2` — for `planfgen-product`.

@@ -26,7 +26,7 @@ from enum import Enum
 from typing import Iterator
 
 from planfgen.brief.plan import Brief
-from planfgen.brief.programme import Programme, RoomSpec
+from planfgen.brief.programme import Programme
 from planfgen.brief.regulation import RegulationProfile
 from planfgen.fabric.axis import WallKind
 from planfgen.partition.grid import StructuralGrid
@@ -46,6 +46,31 @@ REFINE_TOL = 1e-12
 
 #: A working demand is never nudged below this, in m2.
 MIN_DEMAND = 1e-6
+
+
+class UnrealisableTree(ValueError):
+    """The tree cannot be realised on **any** envelope.
+
+    A band with no spare circulation room to name it, a room placed twice, a cut
+    whose children ask for nothing, a `width_source` that names no regulation
+    value: none of these are made better by a larger rectangle. They are
+    properties of the tree and the programme alone, and the answer is the same
+    at every area.
+
+    A `ValueError` because that is what these have always been raised as, and a
+    *subclass* because a caller that answers a realise failure by enlarging the
+    footprint — `brief.footprint._bracket` does exactly that — has to be able to
+    tell it apart from `EnvelopeTooTight`. Left indistinguishable, the solve
+    grows the building until it runs out of patience and then blames the site.
+    """
+
+
+class EnvelopeTooTight(ValueError):
+    """This rectangle cannot host this subtree's walls; a larger one may.
+
+    The only realise failure a bigger footprint can fix, and therefore the only
+    one the footprint solve is allowed to read as an undershoot.
+    """
 
 
 class Direction(Enum):
@@ -106,7 +131,7 @@ class BandCut:
             return profile.corridor_clear
         if self.width_source == "pmr":
             return profile.pmr_circle
-        raise ValueError(
+        raise UnrealisableTree(
             f"unknown width_source {self.width_source!r}; "
             f"expected 'corridor' or 'pmr'"
         )
@@ -140,6 +165,34 @@ class SlicingTree:
         out: list[BandCut] = []
         _collect_bands(self.root, out)
         return out
+
+    def band_names(self, programme: Programme) -> list[str]:
+        """The circulation rooms available to name this tree's bands, in order.
+
+        A circulation room already standing as a `Leaf` is a room, not a spine,
+        and is not in the pool: taking its nom for a band would place the same
+        room twice. This is the rule `_pass` names bands by, published so that
+        a caller proposing bands — the search's `insert_band` — can count them
+        without guessing.
+        """
+        leaf_noms = {leaf.nom for leaf in self.leaves()}
+        return [
+            room.nom
+            for room in programme.circulation_rooms
+            if room.nom not in leaf_noms
+        ]
+
+    def check_nameable(self, programme: Programme) -> None:
+        """Raise `UnrealisableTree` if there are more bands than names for them.
+
+        Checked before any geometry, because no envelope changes the answer.
+        Discovered late — mid-placement, at whatever rectangle happened to be
+        tried — this reads like a failure *of that rectangle*, and a caller that
+        answers those by enlarging the footprint will enlarge it forever.
+        """
+        bands, names = len(self.bands()), len(self.band_names(programme))
+        if bands > names:
+            raise UnrealisableTree(_no_name_for_band(bands, names))
 
     def demand(self, node: Node, programme: Programme) -> float:
         """Total net area, in m2, the programme asks for below this node.
@@ -184,6 +237,7 @@ class SlicingTree:
         deliver what was asked, the right answer is the same relative shortfall
         everywhere, and chasing it room by room would only make it uneven.
         """
+        self.check_nameable(brief.programme)
         targets = _targets(self, brief.programme)
         working = dict(targets)
         best = current = self._pass(rect, brief, grid, working)
@@ -198,7 +252,7 @@ class SlicingTree:
             working = nudged
             try:
                 current = self._pass(rect, brief, grid, working)
-            except ValueError:
+            except EnvelopeTooTight:
                 break
             spread = _spread(current, targets, brief.profile)
             if spread < best_spread:
@@ -215,17 +269,7 @@ class SlicingTree:
         """One top-down placement against a given set of demands."""
         kinds = dict.fromkeys(("left", "right", "bottom", "top"), WallKind.FACADE)
         cells: list[SpaceCell] = []
-        # A circulation room already standing as a leaf is a room, not a spine,
-        # and is not available to name a band. Taking it anyway would place the
-        # same nom twice.
-        leaf_noms = {leaf.nom for leaf in self.leaves()}
-        names = iter(
-            [
-                room
-                for room in brief.programme.circulation_rooms
-                if room.nom not in leaf_noms
-            ]
-        )
+        names = iter(self.band_names(brief.programme))
         self._place(self.root, rect, kinds, brief, grid, cells, names, demands)
         _no_duplicates(cells)
         return PartitionPlan(cells=cells, grid=grid, envelope_rect=rect, brief=brief)
@@ -242,7 +286,9 @@ class SlicingTree:
         d_low = self._demand(low, demands)
         d_total = d_low + self._demand(high, demands)
         if d_total <= 0:
-            raise ValueError("a cut whose children demand no area cannot be placed")
+            raise UnrealisableTree(
+                "a cut whose children demand no area cannot be placed"
+            )
         share = d_low / d_total
 
         if isinstance(node, BandCut):
@@ -385,27 +431,34 @@ def _nudge(
 
 def _require(free: float, extent: float, consumed: float, run: str) -> None:
     if free <= 0:
-        raise ValueError(
+        raise EnvelopeTooTight(
             f"a {extent:.3f} m {run} cannot host {consumed:.2f} m of wall "
             f"and two rooms"
         )
 
 
-def _next_band_nom(names: Iterator[RoomSpec]) -> str:
-    """Bands are named from the programme's circulation rooms, in tree order.
+def _no_name_for_band(bands: int | None = None, names: int | None = None) -> str:
+    """The one wording for a band nobody can name, counted where it is known."""
+    counted = (
+        f": {bands} band(s), {names} spare name(s)" if bands is not None else ""
+    )
+    return (
+        f"the tree has more bands than it has spare circulation rooms to name "
+        f"them{counted}; add a COULOIR or ENTREE per band, and note that a "
+        f"circulation room standing as a Leaf is not available to name one"
+    )
 
-    Circulation rooms already placed as leaves are not in the pool — see
-    `realise`. A tree may therefore run out of names even when the programme
-    looks like it has enough.
+
+def _next_band_nom(names: Iterator[str]) -> str:
+    """Bands are named from `band_names`, in tree order.
+
+    The backstop. `realise` calls `check_nameable` before any geometry, so this
+    is only reached by a caller that placed without going through `realise`.
     """
-    room = next(names, None)
-    if room is None:
-        raise ValueError(
-            "the tree has more bands than it has spare circulation rooms to name "
-            "them; add a COULOIR or ENTREE per band, and note that a circulation "
-            "room standing as a Leaf is not available to name one"
-        )
-    return room.nom
+    nom = next(names, None)
+    if nom is None:
+        raise UnrealisableTree(_no_name_for_band())
+    return nom
 
 
 def _no_duplicates(cells: list[SpaceCell]) -> None:
@@ -417,7 +470,7 @@ def _no_duplicates(cells: list[SpaceCell]) -> None:
             twice.add(placed.nom)
         seen.add(placed.nom)
     if twice:
-        raise ValueError(
+        raise UnrealisableTree(
             f"placed more than once: {', '.join(sorted(twice))}; a room is either a "
             f"leaf or a band, never both"
         )

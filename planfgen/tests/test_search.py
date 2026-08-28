@@ -49,6 +49,7 @@ from planfgen.search import (
     evaluate,
     flip_cut,
     grid_for,
+    insert_band,
     mutate,
     regroup,
     rotate_band,
@@ -522,3 +523,47 @@ def test_adjacency_judges_each_relation_by_what_it_asked_for():
             assert detail[key] == (run >= P.door_module)
         elif relation.kind is R.SEPARATED:
             assert detail[key] == (run == 0.0)
+
+
+# --- how many bands the search may propose ----------------------------------
+
+
+def test_a_programme_with_no_corridor_is_allowed_no_band_at_all():
+    """2026-08-28. `band_budget` was `max(1, len(circulation_rooms))`, so a programme
+    with no corridor was still allowed one band — and a band nobody can name is
+    a candidate no envelope realises. Every such proposal buys a refusal.
+
+    `band_names` is the same pool `realise` names bands from, so the budget and
+    the naming can no longer disagree.
+    """
+    from planfgen.partition import UnrealisableTree
+    from planfgen.search.moves import insert_band
+
+    programme = Programme(
+        [
+            RoomSpec("Sejour", RoomType.SEJOUR, 30.0, "#888888"),
+            RoomSpec("Chambre", RoomType.CHAMBRE, 16.0, "#888888"),
+        ]
+    )
+    plain = SlicingTree(Cut(Direction.V, False, (Leaf("Sejour"), Leaf("Chambre"))))
+    assert plain.band_names(programme) == []
+
+    rng = random.Random(0)
+    for _ in range(20):
+        assert insert_band(plain, rng, budget=0) is plain
+
+    # What the old `max(1, ...)` let through, one line down from the budget.
+    banded = insert_band(plain, rng, budget=1)
+    assert len(banded.bands()) == 1
+    with pytest.raises(UnrealisableTree):
+        banded.check_nameable(programme)
+
+
+def test_the_budget_still_lets_a_corridor_become_a_spine():
+    """The guard must not have closed the move it was written for."""
+    brief = apartment_brief()
+    flat = SlicingTree(
+        Cut(Direction.V, False, (Leaf("Sejour"), Leaf("Cuisine")))
+    )
+    assert flat.band_names(brief.programme) == ["Couloir"]
+    assert len(insert_band(flat, random.Random(1), budget=1).bands()) == 1

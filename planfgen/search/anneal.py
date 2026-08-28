@@ -181,9 +181,13 @@ def anneal(
     if n_iter <= 0:
         return best
 
-    # A band is named from a circulation room, so the programme sets how many
-    # the search may propose.
-    band_budget = max(1, len(brief.programme.circulation_rooms))
+    # A band is named from a *spare* circulation room, so the programme and the
+    # leaf set together set how many the search may propose. This was
+    # `max(1, len(circulation_rooms))`, which let a programme with no corridor
+    # at all propose one band, and a band nobody can name is a candidate that
+    # cannot be realised at any envelope — proposals spent to buy a refusal.
+    # Every move preserves the leaf set, so this figure holds along the walk.
+    band_budget = len(tree0.band_names(brief.programme))
 
     ratio = (t1 / t0) ** (1.0 / max(1, n_iter - 1)) if t0 > 0 else 1.0
     temperature = t0

@@ -35,6 +35,7 @@ from planfgen.partition import (
     SlicingTree,
     SpaceCell,
     StructuralGrid,
+    UnrealisableTree,
 )
 
 EXACT = 1e-9
@@ -393,3 +394,75 @@ def test_the_same_room_cannot_be_placed_twice():
     with pytest.raises(ValueError, match="placed more than once"):
         tree.realise((0.0, 0.0, 12.0, 9.0), brief, StructuralGrid.from_span(12, 9))
 
+
+
+# --- who may name a band ----------------------------------------------------
+#
+# 2026-08-28. The pool was computed inside `_pass` and consulted one band at a time, so
+# a tree with no name for its spine only found out mid-placement, at whatever
+# rectangle it happened to be handed. That reads like a failure OF THAT
+# RECTANGLE, and `brief.footprint._bracket` treated it as one: it grew the
+# footprint by 1.3 forty times and reported a 3.35 million m2 site failure for a
+# 64 m2 flat. The count is an area-free fact, so it is now checked before any
+# geometry and raised as `UnrealisableTree`.
+
+
+def test_a_circulation_room_standing_as_a_leaf_is_not_a_name():
+    brief = brief_for(
+        [
+            ("Sejour", RoomType.SEJOUR, 26.0),
+            ("Chambre", RoomType.CHAMBRE, 16.0),
+            ("Couloir", RoomType.COULOIR, 7.0),
+            ("Entree", RoomType.ENTREE, 4.0),
+        ],
+        12.0,
+        9.0,
+    )
+    spine = SlicingTree(BandCut(Direction.V, (Leaf("Sejour"), Leaf("Chambre"))))
+    assert spine.band_names(brief.programme) == ["Couloir", "Entree"]
+
+    with_couloir_placed = SlicingTree(
+        BandCut(Direction.V, (Leaf("Sejour"), Leaf("Couloir")))
+    )
+    assert with_couloir_placed.band_names(brief.programme) == ["Entree"]
+
+
+def test_an_unnameable_band_is_refused_before_any_geometry():
+    """Same refusal at every envelope, because no envelope is the reason."""
+    brief = brief_for(
+        [("Sejour", RoomType.SEJOUR, 30.0), ("Chambre", RoomType.CHAMBRE, 16.0)],
+        12.0,
+        9.0,
+    )
+    tree = SlicingTree(BandCut(Direction.V, (Leaf("Sejour"), Leaf("Chambre"))))
+
+    with pytest.raises(UnrealisableTree, match=r"1 band\(s\), 0 spare name\(s\)"):
+        tree.check_nameable(brief.programme)
+
+    for side in (9.0, 90.0, 900.0):
+        with pytest.raises(UnrealisableTree):
+            tree.realise((0.0, 0.0, side, side), brief,
+                         StructuralGrid.from_span(side, side))
+
+
+def test_a_rectangle_too_small_is_a_different_failure_from_an_unnameable_band():
+    """One of them a larger footprint fixes; the other it never will."""
+    from planfgen.partition import EnvelopeTooTight
+
+    brief = brief_for(
+        [
+            ("Sejour", RoomType.SEJOUR, 26.0),
+            ("Chambre", RoomType.CHAMBRE, 16.0),
+            ("Couloir", RoomType.COULOIR, 7.0),
+        ],
+        12.0,
+        9.0,
+    )
+    tree = SlicingTree(BandCut(Direction.V, (Leaf("Sejour"), Leaf("Chambre"))))
+    with pytest.raises(EnvelopeTooTight):
+        tree.realise((0.0, 0.0, 1.0, 9.0), brief, StructuralGrid.from_span(1.0, 9.0))
+    assert not isinstance(EnvelopeTooTight("x"), UnrealisableTree)
+
+    plan = tree.realise((0.0, 0.0, 12.0, 9.0), brief,
+                        StructuralGrid.from_span(12.0, 9.0))
+    assert len([c for c in plan.cells if c.is_band]) == 1

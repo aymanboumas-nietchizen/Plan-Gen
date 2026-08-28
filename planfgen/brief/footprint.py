@@ -247,6 +247,11 @@ def fit_footprint(
     secant clamped inside a bracket converges in four steps from `BRACKET_LOW`
     to `BRACKET_HIGH`. `aspect` defaults to the parcel's own proportion.
 
+    A tree the programme cannot support at all — more bands than circulation
+    rooms to name them — raises `UnrealisableTree` out of the first `delivered`,
+    before any solving happens. That is not a failure of this solve and there is
+    no footprint that answers it, so it is not caught here.
+
     Two ways this fails, and they are not the same failure. If the parcel
     cannot deliver the area at all, that is `InfeasibleBrief` and it carries the
     budget that proves it. If the area is there but the *shape* asked for will
@@ -486,21 +491,56 @@ def _bracket(shortfall, demand: float) -> tuple[float, float, float]:
 
     A footprint too small for the tree's own walls raises rather than returning
     a number; that is an undershoot, and the cleanest lower bound there is.
+
+    **Only `EnvelopeTooTight` is an undershoot.** It is the one realise failure
+    a larger footprint can fix, so growing the bracket in answer to it is a
+    measurement. `UnrealisableTree` — a band with no name, a room placed twice —
+    is a property of the tree and the programme, identical at every area, and it
+    propagates untouched. Swallowing it was the four-room crash of 2026-08-27: the same
+    error raised at all forty tries, the bracket grown by 1.3 each time, and the
+    result reported as a failure of a 3.35 million m2 site.
     """
+    from planfgen.partition.tree import EnvelopeTooTight  # cycle: see `_grid`
+
     lo = demand * BRACKET_LOW
     hi = demand * BRACKET_HIGH
+    tight: EnvelopeTooTight | None = None
+    at_largest: float | None = None
     for _ in range(BRACKET_TRIES):
         try:
             f_hi = shortfall(hi)
-        except ValueError:
+        except EnvelopeTooTight as exc:
+            tight = exc
             lo, hi = hi, hi * BRACKET_GROW
             continue
         if f_hi > 0:
             return lo, hi, f_hi
+        at_largest = f_hi + demand
         lo, hi = hi, hi * BRACKET_GROW
-    raise ValueError(
-        f"no footprint under {hi:.1f} m2 delivers the {demand:.2f} m2 demanded; "
-        f"the tree is probably spending everything on walls"
+    raise ValueError(_no_bracket(demand, lo, at_largest, tight))
+
+
+def _no_bracket(
+    demand: float, largest: float, delivered_there: float | None, tight
+) -> str:
+    """Why the bracket ran out, said in what was measured.
+
+    The old wording — "the tree is probably spending everything on walls" — was
+    a guess offered as a diagnosis, and it was wrong about the one case that
+    ever reached it. Neither branch below speculates: one reports the delivery
+    measured at the largest footprint tried, the other reports that no footprint
+    was realisable at all and quotes the failure verbatim.
+    """
+    if delivered_there is not None:
+        return (
+            f"the tree's delivery does not grow to the {demand:.2f} m2 demanded: "
+            f"at {largest:.1f} m2 gross — {largest / demand:.0f}x the demand — "
+            f"its leaves still receive only {delivered_there:.2f} m2. Delivery "
+            f"is monotone in area, so the constraint is the tree, not the site"
+        )
+    return (
+        f"no footprint up to {largest:.1f} m2 could be realised at all; the "
+        f"largest tried was still too tight for the tree's own walls: {tight}"
     )
 
 
@@ -518,12 +558,16 @@ def _budget_for(
     `check_feasibility` makes before any tree exists.
     """
     from planfgen.brief.feasibility import AreaBudget
+    from planfgen.partition.tree import EnvelopeTooTight
 
     whole = Footprint.of_parcel(parcel)
     interior = parcel.interior(profile.facade_t)
     try:
         habitable = delivered(whole, programme, parcel, profile, tree)
-    except ValueError:
+    except EnvelopeTooTight:
+        # The parcel cannot even carry the walls, so it delivers nothing. Only
+        # this failure means that: an `UnrealisableTree` says nothing about the
+        # site and must not be reported as a deficit against it.
         habitable = 0.0
     return AreaBudget(
         gross=parcel.outline.area,
