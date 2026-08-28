@@ -1,117 +1,121 @@
-﻿"""
-PLANFGEN — GhPython Component
-==============================
-Copy-paste this entire file into a GhPython component in Grasshopper.
+"""GhPython component — build a PLANFGEN plan in Rhino.
 
-Inputs (add via Right-click → Manage component I/O):
-    boundary    : Curve  — closed curve defining the envelope (any shape)
-    programme   : str    — JSON string of room programme
-    adjacencies : str    — JSON string of adjacency rules
-    n_variants  : int    — number of seeds to try (default: 100)
-    run         : bool   — toggle True to trigger generation
+Replaces the v1 component, which took the *bounding box* of a Voronoi cell and
+made a `PlaneSurface` from it. That rectangle was never the room; it was the
+smallest box the room fitted inside, and every area it reported in Rhino was a
+different number from the one the engine had computed. Here a space is a closed
+polyline through the coordinates the engine exported, so what appears in Rhino
+is what the engine measured — `document/gh.py` and `tests/test_gh.py` exist to
+guarantee that.
 
-Outputs:
-    surfaces    : list[Surface]  — one Rhino PlaneSurface per room (best layout)
-    scores      : str            — JSON string with score breakdown
-    report      : str            — human-readable one-line summary
+Drop this into a GhPython component.
 
-Example programme JSON input (from a Panel component):
-[
-  {"nom": "Séjour",    "surface": 30, "couleur": "#4a9eff", "facade": true},
-  {"nom": "Cuisine",   "surface": 18, "couleur": "#3ecf8e", "facade": true},
-  {"nom": "Chambre 1", "surface": 20, "couleur": "#f0a500", "facade": true},
-  {"nom": "Couloir",   "surface":  7, "couleur": "#94a3b8", "facade": false}
-]
+    Inputs   path        str   the JSON written by write_gh_json
+             height      float storey height, metres          (default 2.80)
+             net         bool  outline the net polygon too    (default True)
+    Outputs  spaces      Brep  one capped surface per room
+             walls       Brep  one extrusion per wall solid
+             doors       Point one per door, at its centre
+             windows     Point one per window, at its centre
+             shafts      Brep  one extrusion per shaft
+             report      str   what was read
 
-Example adjacencies JSON:
-[["Séjour","Cuisine"],["Séjour","Couloir"],["Cuisine","Couloir"]]
+This file is not imported by the engine and is not covered by the test suite:
+it only runs inside Rhino, where `Rhino.Geometry` exists.
 """
 
-import sys
 import json
 
-# ─── Adjust this path to point to the folder CONTAINING planfgen/ ──────────
-PLANFGEN_PARENT = r"C:\Users\[USERNAME]\.gemini\antigravity\brain\Plan Gen"
-# ────────────────────────────────────────────────────────────────────────────
+import Rhino.Geometry as rg  # noqa: F401  (provided by the Rhino runtime)
 
-if PLANFGEN_PARENT not in sys.path:
-    sys.path.insert(0, PLANFGEN_PARENT)
+#: The schema this component understands. `to_gh_json` writes it.
+EXPECTS = "2.0"
 
-surfaces = []
-scores   = "{}"
-report   = "Not run — set run=True to generate"
 
-if run:
-    try:
-        import Rhino.Geometry as rg
-        from planfgen.core.geometry import Envelope
-        from planfgen.core.optimizer import run_optimization
+def _polyline(points, z=0.0):
+    """A closed polyline curve through a list of [x, y] pairs."""
+    pts = [rg.Point3d(float(x), float(y), z) for x, y in points]
+    pts.append(pts[0])
+    return rg.PolylineCurve(pts)
 
-        # --- Parse JSON inputs -------------------------------------------
-        prog = json.loads(programme)
-        adjs = [tuple(a) for a in json.loads(adjacencies)]
-        n    = n_variants if n_variants else 100
 
-        # --- Extract envelope from boundary curve ------------------------
-        bbox = boundary.GetBoundingBox(True)
-        ox = bbox.Min.X
-        oy = bbox.Min.Y
+def _cap(curve):
+    """The planar surface a closed curve bounds, as a Brep."""
+    breps = rg.Brep.CreatePlanarBreps([curve], 1e-6)
+    return breps[0] if breps else None
 
-        # Build Envelope from boundary curve vertices (supports any shape)
-        try:
-            nurbs = boundary.ToNurbsCurve()
-            pts = [(nurbs.Points[i].Location.X - ox,
-                    nurbs.Points[i].Location.Y - oy)
-                   for i in range(nurbs.Points.Count)]
-            if pts[0] != pts[-1]:
-                pts.append(pts[0])
-            envelope = Envelope.from_coords(pts)
-        except Exception:
-            W = bbox.Max.X - bbox.Min.X
-            H = bbox.Max.Y - bbox.Min.Y
-            if W <= 0 or H <= 0:
-                report = "ERROR: boundary curve has zero width or height"
-                envelope = None
-            else:
-                envelope = Envelope.from_rect(W, H)
 
-        if envelope is not None:
-            # --- Run optimization ----------------------------------------
-            results = run_optimization(prog, adjs, envelope, N=n, top_k=1)
+def _extrude(curve, height):
+    """A solid from a closed planar curve."""
+    extrusion = rg.Extrusion.Create(curve, -float(height), True)
+    return extrusion.ToBrep() if extrusion else None
 
-            if not results:
-                report = "ERROR: no valid layouts generated — check programme areas"
-            else:
-                best = results[0]
 
-                # --- Build Rhino surfaces from actual room polygons -------
-                for room in best["placed"].values():
-                    room_pts = [rg.Point3d(ox + x, oy + y, 0)
-                                for x, y in room.coords]
-                    polyline = rg.Polyline(room_pts)
-                    curve = polyline.ToNurbsCurve()
-                    breps = rg.Brep.CreatePlanarBreps(curve, 0.001)
-                    if breps and len(breps) > 0:
-                        surfaces.append(breps[0])
-                    else:
-                        # Fallback: bounding box PlaneSurface
-                        pt    = rg.Point3d(ox + room.x, oy + room.y, 0)
-                        plane = rg.Plane(pt, rg.Vector3d.ZAxis)
-                        srf   = rg.PlaneSurface(
-                            plane,
-                            rg.Interval(0, room.w),
-                            rg.Interval(0, room.h),
-                        )
-                        surfaces.append(srf)
+def _wall_rectangle(wall):
+    """The wall solid's footprint: length by thickness, centred on the axis."""
+    (x0, y0), (x1, y1) = wall["p0"], wall["p1"]
+    half = wall["thickness"] / 2.0
+    if abs(y1 - y0) < 1e-9:  # horizontal
+        return [[x0, y0 - half], [x1, y0 - half], [x1, y0 + half], [x0, y0 + half]]
+    return [[x0 - half, y0], [x0 - half, y1], [x0 + half, y1], [x0 + half, y0]]
 
-                scores = json.dumps(best["scores"], ensure_ascii=False, indent=2)
-                pct    = best["scores"]["global"]
-                report = f"Best layout: {pct:.0%}  (seed {best['seed']}, N={n})"
 
-    except ImportError as e:
-        report = f"IMPORT ERROR: {e}\nCheck PLANFGEN_PARENT path and that planfgen is installed."
-    except json.JSONDecodeError as e:
-        report = f"JSON PARSE ERROR: {e}\nCheck your programme/adjacencies Panel inputs."
-    except Exception as e:
-        import traceback
-        report = f"ERROR: {e}\n{traceback.format_exc()}"
+def build(path, height=2.80, net=True):
+    """Read the bridge document and return the Rhino geometry it describes."""
+    with open(path, "r") as handle:
+        plan = json.load(handle)
+
+    version = plan.get("schema_version")
+    if version != EXPECTS:
+        return [], [], [], [], [], (
+            "schema_version %r, this component expects %r" % (version, EXPECTS)
+        )
+
+    spaces, walls, doors, windows, shafts = [], [], [], [], []
+
+    for space in plan["spaces"]:
+        outline = space["net_outline"] if net else space["outline"]
+        surface = _cap(_polyline(outline))
+        if surface:
+            spaces.append(surface)
+
+    for wall in plan["walls"]:
+        solid = _extrude(_polyline(_wall_rectangle(wall)), height)
+        if solid:
+            walls.append(solid)
+
+    for door in plan["openings"]["doors"]:
+        x, y = door["position"]
+        doors.append(rg.Point3d(x, y, 0.0))
+
+    for window in plan["openings"]["windows"]:
+        x, y = window["position"]
+        windows.append(rg.Point3d(x, y, (window["allege"] + window["head"]) / 2.0))
+
+    for shaft in plan["shafts"]:
+        x, y, w, h = shaft["x"], shaft["y"], shaft["w"], shaft["h"]
+        footprint = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+        solid = _extrude(_polyline(footprint), height)
+        if solid:
+            shafts.append(solid)
+
+    totals = plan.get("totals", {})
+    report = "%d spaces, %.2f m2 utile, %d walls, %d doors, %d windows, %d shafts" % (
+        len(spaces),
+        totals.get("surface_utile", 0.0),
+        len(walls),
+        len(doors),
+        len(windows),
+        len(shafts),
+    )
+    return spaces, walls, doors, windows, shafts, report
+
+
+# GhPython assigns the component inputs as module-level names and reads the
+# outputs back off them, so the call sits at module scope.
+if "path" in dir():
+    spaces, walls, doors, windows, shafts, report = build(
+        path,
+        height if "height" in dir() and height else 2.80,
+        net if "net" in dir() else True,
+    )

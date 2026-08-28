@@ -3,3 +3,14 @@ __pycache__/
 *.pyc
 *.pyo
 .env
+.pytest_cache/
+outputs/
+planfgen-v2-kit/
+
+# personal, per-machine Claude Code settings (Remote Control, etc.)
+.claude/settings.local.json
+
+# Reference plans. The drawings themselves are client work and never enter git;
+# only the derived measurements in references/measured/ are committed.
+references/raw/*
+!references/raw/.gitkeep
