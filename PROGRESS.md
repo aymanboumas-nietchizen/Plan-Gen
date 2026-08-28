@@ -843,3 +843,25 @@ Proves:   328 pass / 1 skip (6 new); `probe_ceiling.py` unmoved, 4-5 rooms 6/6,
           6-13 all 0/6 on all three profiles.
 Next:     The studio still never calls `fit_brief` / `place_footprint`, so the
           user hand-calibrates areas to an envelope nothing shows them.
+
+---
+
+## S19 — Reconnaissance before extraction (no engine code)   2026-08-28
+
+Built:    `tools/inspect_dxf.py`. Read-only. Reports units, extents, layers by
+          entity type, closed polylines as room candidates, blocks, French room
+          labels, and dimension measurements. It does not extract anything.
+Why:      The agency's first file is a permis-de-construire of a whole building,
+          >30 MB, every level and the title block in one drawing. Writing
+          `measure_reference.py` against a guess at its layer structure would be
+          guesswork; the file is on another machine, so it has to be run there.
+Answers:  The three that size the corpus track — the UNIT (architectural DXF is
+          very often mm, and an extractor assuming metres is out by 1000x in
+          silence), whether ROOMS EXIST as closed polylines or only as wall
+          lines (the second is a much bigger job), and WHICH LAYERS hold walls.
+          It also prints the evidence for axis-vs-face, without deciding it.
+Tested:   Against two real DXFs, which found two bugs. `$EXTMIN`/`$EXTMAX` are
+          +/-1e20 until a drawing is regenerated, so the extent printed as
+          "-200000000000000000 m"; and a Windows console at cp1252 turned
+          "Unités" into "Unit?s", which matters when every label is French.
+Next:     Run it at the agence on NOUR II - BAT 1 and read the three answers.
