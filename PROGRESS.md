@@ -825,3 +825,21 @@ Decided:  THE CEILING DID NOT MOVE — 5-13 identical to the refusal count on al
           term 1.0 by vacuity, so not comparable with the rows below).
 Next:     `seed_tree` (queue 2). `studio/app.py` has the same unnameable-band
           hole, guarding only `len(rooms) < 2` — for `planfgen-product`.
+
+---
+
+## S19 — A flat with no corridor is a plan, not a crash       2026-08-28
+Found:    Driven in a browser: deleting the `Couloir` row made `app.py` build a
+          `BandCut` nobody could name (200 "unrealisable", no reason shown), and
+          one room raised `seed_tree`'s ValueError OUTSIDE the try/except — a
+          raw Streamlit traceback with an "Ask ChatGPT" link on it.
+Built:    `studio/seed.py`. `seed_tree` bands only when a circulation room names
+          it; `spine_note` says which spine, and what it costs, BEFORE the
+          button; under two rooms is refused in Faisabilite. L0-L7 untouched.
+Decided:  Corridorless GENERATES — an F1 has none. What must be said first is
+          that no band absorbs the marge, so the rooms do: 12.6 % over, 0 of 4
+          seeds; 4.2 %, 4 of 4; `AREA_TOLERANCE` sits between them.
+Proves:   328 pass / 1 skip (6 new); `probe_ceiling.py` unmoved, 4-5 rooms 6/6,
+          6-13 all 0/6 on all three profiles.
+Next:     The studio still never calls `fit_brief` / `place_footprint`, so the
+          user hand-calibrates areas to an envelope nothing shows them.

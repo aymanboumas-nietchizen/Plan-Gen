@@ -8,7 +8,9 @@ first and called it the second. Here they sit behind adjacent tabs, drawn from
 the same run, and are obviously different things.
 
 The feasibility budget is shown *before* anything is generated, because a brief
-that cannot be built is not a generation problem.
+that cannot be built is not a generation problem. `seed.spine_note` holds that
+line for the *tree*: what the spine will be, and what a programme with no
+circulation room costs, are on the page before the button is pressed.
 """
 
 from __future__ import annotations
@@ -35,11 +37,11 @@ from planfgen.document import export_dxf, to_gh_json, to_svg
 from planfgen.document.dimensions import exterior_chains, interior_chains
 from planfgen.evaluate import all_gates
 from planfgen.openings import place_openings
-from planfgen.partition import BandCut, Cut, Direction, Leaf, SlicingTree
 from planfgen.search import RunStats, anneal, envelope_of, evaluate, grid_for
 from planfgen.services import assign_stack_ids, assign_wet_walls, place_shafts
 from planfgen.services.stacking import Level
 from planfgen.studio.render import partition_svg, topology_svg
+from planfgen.studio.seed import seed_tree, spine_note
 from planfgen.topology import ProgrammeGraph, Relation, RelationType
 
 st.set_page_config(page_title="PLANFGEN v2", layout="wide")
@@ -122,24 +124,6 @@ def build_graph(relations) -> ProgrammeGraph:
     )
 
 
-def seed_tree(programme) -> SlicingTree:
-    """A spine with the rooms hung off it, day side west."""
-    rooms = [r.nom for r in programme.rooms if not r.kind.is_circulation]
-    if len(rooms) < 2:
-        raise ValueError("a plan needs at least two rooms beside the circulation")
-    half = max(1, len(rooms) // 2)
-    return SlicingTree(
-        BandCut(Direction.V, (_chain(rooms[:half]), _chain(rooms[half:])))
-    )
-
-
-def _chain(noms):
-    node = Leaf(noms[-1])
-    for nom in reversed(noms[:-1]):
-        node = Cut(Direction.H, False, (Leaf(nom), node))
-    return node
-
-
 # --- the page ---------------------------------------------------------------
 
 
@@ -183,6 +167,17 @@ if not budget.ok:
     )
     st.stop()
 st.success(f"Marge : {-budget.deficit:.2f} m2")
+
+note = spine_note(brief.programme, budget)
+if not note.ok:
+    st.error(note.message)
+    st.stop()
+if note.kind == "band":
+    st.caption(note.message)
+elif note.kind == "tight":
+    st.warning(note.message)
+else:
+    st.info(note.message)
 
 if not st.button("Generer", type="primary"):
     st.info("Le graphe L1 ci-dessous existe deja. Le plan, non.")
