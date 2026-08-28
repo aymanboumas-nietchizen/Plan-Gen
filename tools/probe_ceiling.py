@@ -27,15 +27,38 @@ generous parcel, `fit_brief` to solve the footprint, and the studio's own
 
 So the "ceiling 9 cells" recorded in PROGRESS S16-S18 is PATH-DEPENDENT: it was
 reached by the search's own moves from a shaped seed, and does not survive the
-entry path the studio uses. `furniture` dominates every refusal, and
-`max_ratio = 3.0` in `habitability/furniture.py` is an invented number standing
-in for the unimplemented ART. 4 daylight-depth rule.
+entry path the studio uses. `furniture` dominates every refusal. Note that
+`max_ratio = 3.0` in `habitability/furniture.py` is MEASURED, not invented — its
+docstring carries the sweep — but it is the project's own figure standing in for
+the unimplemented ART. 4 daylight-depth rule.
 
 The 4-room crash is a separate bug: the secant in `fit_footprint` diverges by
 six orders of magnitude instead of bracketing.
 
+THE CEILING IS STRUCTURAL, NOT REGULATORY. Run across all three profiles
+2026-08-27 — the placeholder `MA_PROFILE`, plus the two sourced ones that the
+studio has never used:
+
+    profile      corridor_clear  daylight  5 rooms   6-13 rooms
+    placeholder      1.20         0.1250   6/6 0.814   all 0/6
+    economique       0.80         0.1000   6/6 0.831   all 0/6
+    casablanca       0.90         0.1667   6/6 0.831   all 0/6
+
+Identical ceiling, identical crash, `furniture` dominant throughout. So the
+placeholder numbers are not what caps the engine, and no amount of sourcing
+regulation will lift it. Two things the sweep also shows:
+
+  - the sourced profiles trade one refusal for another rather than reducing
+    them: a narrower corridor gives rooms more area (`area` 756 -> 677 at six
+    rooms) and worse proportions (`furniture` 1033 -> 1116). Net zero.
+  - economique and casablanca are nearly identical DESPITE disagreeing on SDB
+    minimum (1.30 vs 3.00 m2), SEJOUR (12 vs 14) and daylight ratio (0.10 vs
+    0.167). The minima are not binding: this catalog's round numbers sit well
+    above all of them, so they never fire. A probe with a programme sized near
+    the minima would be a different measurement, and has not been run.
+
 Re-run this whenever a gate, a move or the footprint solver changes. A number
-that moves is the finding; the table above is the baseline it moved from.
+that moves is the finding; the tables above are the baseline it moved from.
 """
 
 from __future__ import annotations
@@ -58,6 +81,7 @@ from planfgen.brief import (
     check_feasibility,
 )
 from planfgen.brief.footprint import fit_brief
+from planfgen.brief.regulation import PROFILES, RegulationProfile
 from planfgen.partition import BandCut, Cut, Direction, Leaf, SlicingTree
 from planfgen.search import RunStats, anneal
 from planfgen.topology import ProgrammeGraph, Relation, RelationType
@@ -111,7 +135,7 @@ def seed_tree(programme: Programme) -> SlicingTree:
     )
 
 
-def build(n: int) -> tuple[Brief, SlicingTree, ProgrammeGraph]:
+def build(n: int, profile: RegulationProfile = MA_PROFILE) -> tuple[Brief, SlicingTree, ProgrammeGraph]:
     """An uncalibrated brief for the first `n` rooms of the catalog."""
     programme = Programme(
         [
@@ -137,7 +161,7 @@ def build(n: int) -> tuple[Brief, SlicingTree, ProgrammeGraph]:
         north=0.0,
         entry_edge=0,
     )
-    brief = Brief(programme, parcel, MA_PROFILE, check_feasibility(programme, parcel, MA_PROFILE))
+    brief = Brief(programme, parcel, profile, check_feasibility(programme, parcel, profile))
     tree = seed_tree(programme)
     graph = ProgrammeGraph(
         [
@@ -149,14 +173,14 @@ def build(n: int) -> tuple[Brief, SlicingTree, ProgrammeGraph]:
     return brief, tree, graph
 
 
-def probe(n: int, seeds: int = 6, iterations: int = 300) -> str:
+def probe(n: int, profile: RegulationProfile = MA_PROFILE, seeds: int = 6, iterations: int = 300) -> str:
     """One row of the table. Six seeds because one proves nothing.
 
     PROGRESS S18 records a metric test that flipped merely because two new moves
     changed the draw order — the search is stochastic and a single run samples
     one corner of the space.
     """
-    brief, tree, graph = build(n)
+    brief, tree, graph = build(n, profile)
     try:
         brief = fit_brief(brief, tree, aspect=ASPECT)
     except Exception as exc:
@@ -184,9 +208,21 @@ def probe(n: int, seeds: int = 6, iterations: int = 300) -> str:
 
 
 def main() -> None:
-    print(f"{'rooms':>5}  {'ok/seeds':>9}  {'best':>7}  {'sec':>6}  top refusals")
-    for n in range(4, len(CATALOG) + 1):
-        print(probe(n), flush=True)
+    """Every named profile, because the engine has only ever been run on one.
+
+    `MA_PROFILE` is the unsourced placeholder and is what `studio/app.py` uses
+    at every call site; `MA_ECONOMIQUE` (decret 2-64-445) and `MA_CASABLANCA`
+    (arrete municipal) are the sourced ones and are used nowhere outside tests.
+    They disagree — corridor_clear is 1.20 / 0.80 / 0.90 and the minima differ
+    room by room — so the ceiling is not one number, it is one per profile.
+    """
+    for name, profile in PROFILES.items():
+        print(f"\n=== {name} ===")
+        print(f"  corridor_clear={profile.corridor_clear:.2f}  "
+              f"daylight_ratio={profile.daylight_ratio:.4f}")
+        print(f"{'rooms':>5}  {'ok/seeds':>9}  {'best':>7}  {'sec':>6}  top refusals")
+        for n in range(4, len(CATALOG) + 1):
+            print(probe(n, profile), flush=True)
 
 
 if __name__ == "__main__":

@@ -779,3 +779,31 @@ Found:    S18's fixtures cannot use the `tests/fixtures/` format — it is
 Next:     Repo moves to the agence for DXF reference plans. Either fix the
           4-room crash, or sweep `max_ratio` against the ceiling — QA first,
           then a repair session.
+
+---
+
+## S17 — The ceiling is not the numbers                       2026-08-27
+
+Built:    `tools/probe_ceiling.py` takes a `RegulationProfile`; `main` sweeps all
+          three in `PROFILES`. Default behaviour unchanged.
+Measured: The engine has only ever run on `MA_PROFILE`, the UNSOURCED default —
+          `studio/app.py` uses it at every call site and `Brief.load` defaults to
+          it. `MA_ECONOMIQUE` (decret 2-64-445) and `MA_CASABLANCA` (arrete) are
+          the sourced ones and appear nowhere outside tests.
+Result:   NO DIFFERENCE. 5 rooms 6/6 on all three (0.814 placeholder, 0.831 both
+          sourced); 6 through 13 rooms 0/6 on all three; same 4-room crash;
+          `furniture` dominant throughout. The ceiling is STRUCTURAL. Sourcing
+          regulation will not lift it — that work is worth doing for correctness,
+          not for capacity.
+Found:    The sourced profiles trade refusals rather than reduce them: narrower
+          corridor gives more area (`area` 756 -> 677) and worse proportions
+          (`furniture` 1033 -> 1116). And economique/casablanca are near-identical
+          despite disagreeing on SDB minimum (1.30 vs 3.00 m2) and daylight ratio
+          (0.10 vs 0.167) — THE MINIMA NEVER FIRE, because the catalog's round
+          numbers sit far above all of them. A probe sized near the minima is a
+          different measurement and has not been run.
+Fixed:    The docstring claim that `max_ratio = 3.0` is invented. It is measured;
+          its own docstring carries the sweep. The same error was in the
+          `planfgen-qa` brief and is corrected there too.
+Next:     `planfgen-engine`, not `planfgen-regs`. The 4-room crash first, then
+          whether `seed_tree`'s degenerate comb is the actual ceiling.
