@@ -1233,3 +1233,36 @@ FIRST REAL ANSWER ON max_ratio: measured on those rooms, CHAMBRE runs 1.25:1 at
           to planfgen-optima, not planfgen-regs.
 Caveats:  One villa-class drawing, and SEJOUR at 3.87 is still contaminated by
           the open-plan reception faces.
+
+---
+
+## S21e — The layer-0 blocks are walls, not furniture        2026-09-12
+
+WRONG:    The furniture hypothesis. NOUR's 6920 layer-0 blocks inside the plan
+          regions are named `Mur_1` … `Mur_6920`, one placement each, and NONE
+          is a fixture. The FURNITURE filter matched 0 of 6920 — correctly,
+          because there was nothing to match. Whatever cuts NOUR's rooms into
+          5.1 m2 pieces, it is not furniture in the barrier set.
+FOUND:    ONE BLOCK PER WALL IS A BIM EXPORT. That also explains the 10604
+          distinct blocks for 11334 placements which S20 called pathological —
+          it is not a damaged file, it is ArchiCAD or Revit writing DXF, and
+          `_Murs - Exterieurs` / `2D - Cotations pour 100eme` / `Equip -
+          Mobilier` is ArchiCAD's layer convention rather than three hands.
+          So the ORIGINAL of NOUR very probably carries Zones, and one export
+          with Zones on would skip wall recovery for this building entirely.
+Method:   The three previous NOUR guesses all came from FILE-WIDE counts. This
+          one counted inside the plan regions and overturned the hypothesis in
+          a single pass. File-wide counts have now been wrong three times —
+          hatch layers, wall layers, and block names.
+Cost:     One run was lost to a shell error, not a wrong idea: written as
+          `python - 2>&1 | tail -26 <<'PY'`, the heredoc binds to `tail`, so
+          python read empty stdin, tail printed the script, and the whole thing
+          EXITED 0. The third silent failure this session from driving work
+          through shell strings — the others being `\n` in a heredoc becoming a
+          real newline, and a line-range delete eating a function signature.
+          All three exited successfully. Write the script to a file.
+Status:   FURNITURE stays, unproven: 0 matches on both files, no regression on
+          either, and no evidence yet that it is needed at all.
+Next:     Ask for NOUR's ArchiCAD original with Zones. Meanwhile ENNAKHIL is the
+          calibrated file and a second of its quality is worth more than a
+          fourth attempt at this one.
