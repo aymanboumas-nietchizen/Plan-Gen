@@ -46,7 +46,11 @@ import statistics
 import sys
 from collections import Counter, defaultdict
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _HERE)
+# The repo root too, so `planfgen` imports whatever directory this is run from —
+# the sanity check below reads the decret's minima from the engine's own profile.
+sys.path.insert(1, os.path.dirname(_HERE))
 
 from shapely.geometry import LineString, Point  # noqa: E402
 from shapely.ops import polygonize, unary_union  # noqa: E402
@@ -71,6 +75,29 @@ ROOM_TYPES: tuple[tuple[re.Pattern, str], ...] = (
     (re.compile(r"bureau", re.I), "BUREAU"),
     (re.compile(r"cellier|buanderie|d[ée]barras|rangement|placard", re.I), "CELLIER"),
     (re.compile(r"terrasse|balcon|loggia|patio", re.I), "TERRASSE"),
+)
+
+#: Block names that are furniture, fixtures or annotation rather than building.
+#:
+#: NOUR's plan geometry is block references on layer 0 — 6920 of them — and the
+#: layer says nothing about which are walls. The NAMES do: `Symbole WC 22`,
+#: `Douche rectangulaire 22`, `Réfrigérateur haut 22`, `Cuisinière 22`. Left in
+#: the barrier set they subdivide every room, and the pieces measured 5.1 m2 for
+#: a CHAMBRE against a legal minimum of 9.0.
+#:
+#: `sy\w*bole` rather than `symbole` on purpose: ENNAKHIL contains a block named
+#: `Sybole conduit 110`, and a filter that misses a typo leaves the thing it was
+#: written to remove.
+FURNITURE = re.compile(
+    r"sy\w*bole|"                                          # annotation symbols
+    r"\bwc\b|douche|bidet|lavabo|[ée]vier|baignoire|toilette|urinoir|"
+    r"cuisini[èe]re|r[ée]frig[ée]rateur|encimera|hotte|plaque|four\b|"
+    r"chaise|table|\blit\b|canap[ée]|fauteuil|armoire|seat|sofa|\bbed\b|"
+    r"meuble|mobilier|placard|"
+    r"voiture|arbre|plante|jeu\b|toboggan|ressort|"        # site and playground
+    r"incendie|extincteur|"
+    r"niveau|hauteur|conduit|\bep\b",
+    re.I,
 )
 
 #: Types that are circulation rather than rooms served by it.
@@ -106,13 +133,15 @@ def classify(label: str) -> str | None:
     return None
 
 
-def barriers(msp, keep, walls: re.Pattern, snap: float):
+def barriers(msp, keep, walls: re.Pattern, snap: float,
+             furniture: re.Pattern | None = FURNITURE):
     """Every edge that a room's boundary could run along, snapped and noded.
 
     Arcs are included because a door's swing often closes its own opening, and
     a circle because a column drawn as one is a real obstruction.
     """
     used: Counter = Counter()
+    dropped: Counter = Counter()
     lines: list[LineString] = []
 
     def add(points, layer):
@@ -138,6 +167,9 @@ def barriers(msp, keep, walls: re.Pattern, snap: float):
         for entity in msp:
             if entity.dxftype() == "INSERT":
                 if not walls.search(entity.dxf.layer or "") or not _keep(entity, keep):
+                    continue
+                if furniture is not None and furniture.search(entity.dxf.name or ""):
+                    dropped[entity.dxf.name] += 1
                     continue
                 try:
                     for sub in entity.virtual_entities():
@@ -202,7 +234,7 @@ def barriers(msp, keep, walls: re.Pattern, snap: float):
                         add([(c[0], c[1]), (point[0], point[1])], layer)
         except Exception:
             continue
-    return lines, used
+    return lines, used, dropped
 
 
 #: The width of an opening worth bridging. A door leaf is 0.70–0.90 m and a
@@ -377,6 +409,8 @@ def main() -> None:
     parser.add_argument("--snap", type=float, default=0.02,
                         help="metres; coordinates are rounded onto this grid "
                              "before noding, to close near-misses")
+    parser.add_argument("--keep-furniture", action="store_true",
+                        help="do not drop fixture blocks — for comparison")
     parser.add_argument("--no-bridge", action="store_true",
                         help="do not infer openings — for comparison")
     parser.add_argument("--plans-only", action="store_true")
@@ -405,12 +439,18 @@ def main() -> None:
         print(f"  {len(keep)} plan region(s)")
 
     _rule("BARRIERS")
-    lines, used = barriers(msp, keep, re.compile(args.walls, re.I), args.snap)
+    lines, used, dropped = barriers(
+        msp, keep, re.compile(args.walls, re.I), args.snap,
+        None if args.keep_furniture else FURNITURE)
     print(f"  edges         {len(lines)} on layers matching /{args.walls}/")
     if not lines:
         sys.exit("\n  No barrier geometry. Run inspect_dxf and pass its wall layers.")
     for layer, n in used.most_common(6):
         print(f"    {layer[:40]:<40}{n:>7}")
+    if dropped:
+        print(f"  dropped       {sum(dropped.values())} furniture/fixture blocks")
+        for name, n in dropped.most_common(5):
+            print(f"    {name[:40]:<40}{n:>7}")
 
     _rule("OPENINGS")
     stitches, bridges = ([], []) if args.no_bridge else bridge_openings(lines)
@@ -493,6 +533,45 @@ def main() -> None:
     for r in sorted(over, key=lambda r: -(r["w"] / r["h"]))[:6]:
         print(f"    {r['nom'][:22]:<22}{r['w'] / r['h']:>6.2f}:1"
               f"  {r['w']:.2f} x {r['h']:.2f} m")
+
+    _rule("SANITY  (measured medians against the decret minima)")
+    # This is what caught the fragmentation, and it is cheap enough to keep.
+    # Layer 0 carried furniture as well as walls, every room was cut into
+    # pieces, and the pieces measured a median 5.1 m2 for a CHAMBRE against a
+    # legal minimum of 9.0. The aspect ratios looked excellent — fragments are
+    # blocky — so nothing in the geometry said anything was wrong.
+    #
+    # A built and permitted building cannot sit below the code it was permitted
+    # under. So a median under the minimum does not mean the BUILDING is
+    # illegal, it means the thing being measured is not the room.
+    try:
+        from planfgen.brief.programme import RoomType
+        from planfgen.brief.regulation import MA_ECONOMIQUE
+    except ImportError:
+        print("  planfgen not importable — run from the repo root to enable this")
+        return
+
+    suspect = 0
+    for kind in sorted(by_kind, key=lambda k: -len(by_kind[k])):
+        try:
+            minimum = MA_ECONOMIQUE.min_area.get(RoomType[kind])
+        except KeyError:
+            continue
+        if not minimum:
+            continue
+        median = statistics.median(r["area"] for r in by_kind[kind])
+        mark = ""
+        if median < minimum:
+            mark = "  <- BELOW; these are fragments, not rooms"
+            suspect += 1
+        print(f"  {kind:<22}{median:>7.1f} m2   decret {minimum:>5.2f}{mark}")
+
+    if suspect:
+        print(f"\n  {suspect} type(s) measure below the minimum they were built to.")
+        print("  Something other than the room is being measured — most likely")
+        print("  furniture still in the barrier set cutting rooms into pieces.")
+    else:
+        print("\n  Every type sits at or above its legal minimum.")
 
     _rule("CIRCULATION")
     circ = [r for r in rooms if r["kind"] in CIRCULATION]

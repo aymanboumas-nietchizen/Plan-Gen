@@ -1196,3 +1196,40 @@ Note:     `MA_ECONOMIQUE.min_area` caught this, not the geometry. The engine's
 Next:     Separate walls from furniture inside layer 0. The block NAMES are the
           lead — NOUR's commonest are `Symbole WC 22`, `Douche rectangulaire
           22`, `Refrigerateur haut 22`, all plainly fixtures.
+
+---
+
+## S21d — A furniture filter that has not yet proved itself   2026-09-12
+
+Built:    `FURNITURE`, a block-NAME filter. NOUR's plan geometry is 6920 block
+          references on layer 0 and the layer says nothing about which are
+          walls; the names do — `Symbole WC 22`, `Douche rectangulaire 22`,
+          `Cuisinière 22`. `sy\w*bole` rather than `symbole` deliberately:
+          ENNAKHIL holds a block named `Sybole conduit 110`, and a filter that
+          misses a typo leaves the thing it was written to remove.
+HONEST:   IT HAS DROPPED NOTHING SO FAR. ENNAKHIL: zero blocks matched, and no
+          regression — 29158 edges and 27 rooms, unchanged, which at least
+          proves it does not eat the door blocks that close ENNAKHIL's
+          doorways. NOUR: zero matched, and the run is byte-identical. The
+          diagnostic for why — what those 6920 layer-0 blocks are actually
+          named inside the plan regions — was still running when this was
+          written. The earlier block names came from a FILE-WIDE count, and
+          file-wide counts have now sent this work the wrong way twice.
+Built:    `SANITY`, and this one earns its place. It reads `MA_ECONOMIQUE
+          .min_area` and flags any type whose measured median falls below the
+          minimum it was permitted under. A built building cannot sit below its
+          own code, so a median under the minimum does not mean the building is
+          illegal — it means the thing being measured is not the room. This is
+          what caught NOUR's fragments when the aspect ratios looked excellent.
+Fixed:    `planfgen` was not importable from `tools/`; only the tools directory
+          was on the path. Verified from the repo root and from `C:\`.
+ENNAKHIL CALIBRATED. Every type at or above its legal minimum — WC 3.4 vs 0.85,
+          SDB 6.1 vs 1.30, SEJOUR 16.5 vs 12.0, CHAMBRE 10.4 vs 9.0,
+          CHAMBRE_PRINCIPALE 17.3 vs 12.0. These are rooms, not fragments.
+FIRST REAL ANSWER ON max_ratio: measured on those rooms, CHAMBRE runs 1.25:1 at
+          the median, SDB 1.76, WC 1.51, CELLIER 1.42. NOTHING NEAR 3.0. On this
+          evidence the invented cap is not what costs the engine capacity, which
+          agrees with S17's finding that the ceiling is structural — so it goes
+          to planfgen-optima, not planfgen-regs.
+Caveats:  One villa-class drawing, and SEJOUR at 3.87 is still contaminated by
+          the open-plan reception faces.
