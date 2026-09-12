@@ -976,3 +976,39 @@ Typology: `Salon Marocain` IS a `SEJOUR`, corrected by the architect — and a
           Moroccan dwelling may have BOTH it and a separate sejour. So no new
           RoomType; what it means is that two SEJOUR-kind rooms in one programme
           is normal typology and must not be read as a duplicate. For regs.
+
+---
+
+## S20e — NOUR with --plans-only, and three bugs it found    2026-09-12
+
+Result:   The filter works well on NOUR because this file TITLES its plans.
+            elevation 211431  `FACADE PRINCIPALE A`
+            plan        5179  `Plan: 3eme et 4eme Etage`
+            plan        4430  `Plan: 1er et 2eme Etage`
+            plan        3748  `Plan: RDC-Mezzanine`
+            plan        3165  `Plan: Fondations - Sous-sol`
+            plan        2014  `Plan: Terrasse`
+          NINETY-ONE PERCENT OF THE 210 MB FILE IS ONE ELEVATION. Only ~18500
+          entities are plan. Five plan regions reconcile with the six `NIV:`
+          markers — floors are drawn in pairs.
+Bugs:     1. `\bcoupes?\b` matched "PORTE COUPE FEU". Coupe-feu is fire
+             RESISTANCE, not a section, and the region excluded as a section was
+             in fact `Plan: Fondations - Sous-sol` — a whole plan lost. Negative
+             lookahead now.
+          2. `report_labels` read `MTEXT.text`, the RAW string with inline
+             formatting, so its output was unreadable AND it matched room words
+             against `\fTimes New Roman|b1|i0`. `plain_text()` now.
+          3. WORST: `--plans-only` reported `dimensions 0` on a file holding
+             8274. `_point_of` looked for insert/start/center/location and a
+             DIMENSION carries NONE of them — it has `defpoint` and
+             `text_midpoint`. Every dimension returned None, `_keep` dropped it,
+             and the tool printed a confident "No readable dimensions". A
+             measurement tool that reports absence instead of failing is the
+             worst kind of bug there is. 0 -> 7852 after the fix.
+Open:     The axis/face question is still unanswered. Median dimension is
+          0.625 m, so most of the 7852 are detail cotes rather than room widths,
+          and the 6%-on-a-5cm-grid figure is measuring the wrong population.
+Note:     The labels include `Adresse: 9 rue Figuig avenue Patrice Lumumba`.
+          Identifying data is in the drawing text and would flow into a naive
+          extraction, so the anonymisation rule on references/measured/ is not
+          theoretical.

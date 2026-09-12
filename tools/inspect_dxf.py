@@ -200,7 +200,9 @@ CARTOUCHE = re.compile(r"cartouche|titre|title", re.I)
 #: drawing as elevation.
 SHEET_KINDS = (
     ("elevation", re.compile(r"\bfa[cç]ades?\b|\belevations?\b|\bpignons?\b", re.I)),
-    ("section", re.compile(r"\bcoupes?\b|\bsections?\b", re.I)),
+    # "coupe-feu" is fire RESISTANCE, not a section: NOUR II's fire-door
+    # schedule is titled "PORTE COUPE FEU" and was classified as a section.
+    ("section", re.compile(r"\bcoupes?\b(?!\s*-?\s*feu)|\bsections?\b", re.I)),
     ("detail", re.compile(r"\bd[ée]tails?\b|\bcartouches?\b|\brep[ée]rages?\b", re.I)),
     ("plan", re.compile(r"\bplans?\b|\bniv\s*[:.]|\br\.?d\.?c\b|\b[ée]tages?\b"
                         r"|\bmezzanines?\b|\bsous.?sols?\b|\bterrasses?\b", re.I)),
@@ -215,7 +217,12 @@ def _point_of(entity) -> tuple[float, float] | None:
     apart.
     """
     d = entity.dxf
-    for attr in ("insert", "start", "center", "location"):
+    # `defpoint` and `text_midpoint` are here for DIMENSION, which carries
+    # neither `insert` nor `start`. Without them every dimension returned None,
+    # `_keep` rejected it, and --plans-only reported "0 dimensions" on a file
+    # holding 8274 of them — a silent loss that looked like a finding.
+    for attr in ("insert", "start", "center", "location",
+                 "defpoint", "text_midpoint"):
         if d.hasattr(attr):
             try:
                 p = d.get(attr)
@@ -532,7 +539,11 @@ def report_labels(msp, limit: int, keep=None) -> None:
             continue
         total += 1
         try:
-            raw = entity.dxf.text if kind == "TEXT" else entity.text
+            # MTEXT.text is the RAW string, carrying inline formatting —
+            # "\A1;{\pqc;\fTimes New Roman|b1|i0|c0|p22;Cuisine". Printed, it is
+            # unreadable; matched against room words, the codes are noise.
+            # plain_text() is what the drawing actually shows.
+            raw = entity.dxf.text if kind == "TEXT" else entity.plain_text()
         except AttributeError:
             continue
         text = " ".join(raw.split())
