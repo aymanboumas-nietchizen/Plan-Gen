@@ -1041,3 +1041,36 @@ Bugs:     Two in the test itself, both caught by the output contradicting itself
           first. Both now derive from one millimetre list.
 Next:     The convention has to come off the drawing by eye, or from whoever
           drew it. references/README.md requires it per fixture either way.
+
+---
+
+## S20g — The convention, decided by geometry                2026-09-12
+
+Pushed:   The architect was right that this is automatable and the earlier
+          "take it off the drawing by eye" was giving up too early.
+Built:    `report_convention`. A `DIMENSION` stores `defpoint2`/`defpoint3`, the
+          model-space points its extension lines spring from, so the question is
+          not whether the VALUES look round — it is what geometry sits AT the
+          point where a cote terminates. On a drawn edge means face to face;
+          half a wall from any edge means axis to axis, since an axis is
+          imaginary and nothing is drawn there.
+Removed:  The whole roundness analysis, 70 lines, and the `--walls` flag.
+Result:   ENNAKHIL 93% on the line against 1% half a wall -> FACE, settled.
+          NOUR 29% against 7% -> leans FACE four to one, but two thirds land on
+          neither, so it reports the ratio and asks for corroboration.
+Learned:  Four defects, and the number climbed at each fix — 34 -> 76 -> 87 ->
+          93%. A measurement that rises as restrictions come off was limited by
+          the restrictions, not by the data.
+          1. Roundness was a proxy. It called ENNAKHIL "a lean" at 34%.
+          2. Without a spatial hash NOUR reported a median distance of 96.9 m:
+             its sheet regions sit ~100 m apart and `_Murs - Exterieurs` is the
+             ELEVATION's walls, so plan cotes were measured against facades.
+          3. `--walls` asked the user to guess the answer. /mur/ matches that
+             same elevation layer. Now every layer is read and the layers the
+             cotes LAND on are reported — which is where the walls are.
+          4. A wall is not always two lines. NOUR draws its as polygons, so a
+             LINE-only pass found 3716 lines for 3712 cote ends and concluded
+             cotes terminate on ESCALIER and SANETAIRE. With LWPOLYLINE edges
+             included, NOUR's plan walls show up on `2D - Dessin general`.
+Next:     `provenance.dimensioning` can be filled automatically for ENNAKHIL.
+          NOUR needs one room checked by eye against its walls.

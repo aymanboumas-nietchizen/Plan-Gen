@@ -20,9 +20,22 @@ Four questions this answers, in the order they matter:
   3. WHICH LAYERS matter? Name and entity count per layer is the whole map.
   4. AXIS OR FACE? The dimensioning convention — see `references/README.md`. A
      3.00 m cote against a 15 cm cloison means 3.00 net or 2.85 net, a 5% error
-     on the one quantity this project is exact about. This script cannot decide
-     it, but it prints the evidence a human needs: the dimension measurements it
-     found, and the parallel-line spacings that are candidate wall thicknesses.
+     on the one quantity this project is exact about. This is DECIDED here, by
+     geometry: a `DIMENSION` stores the model-space points its extension lines
+     spring from, so the test is what sits at the point where a cote terminates.
+     On a drawn line means face to face; half a wall from any line means axis to
+     axis, because an axis is imaginary and nothing is drawn there.
+
+     An earlier version scored how many cotes landed on a round 10 cm instead.
+     That was a proxy and it was too weak: it called ENNAKHIL "a lean" at 34%
+     where the geometry says 93% on the line, and on NOUR it gave no signal.
+
+     The comparison takes LINE and LWPOLYLINE on every layer, and reports which
+     layers the cotes land on rather than asking for them. Two reasons, both
+     learned the hard way: a --walls regex of /mur/ matches NOUR's
+     `_Murs - Exterieurs`, which is the ELEVATION's walls; and a wall is not
+     always two lines — NOUR draws its as polygons, so a LINE-only pass found
+     no wall in its plans at all.
 
 Everything is read-only. The file is never modified.
 """
@@ -609,74 +622,173 @@ def report_dimensions(msp, to_m: float | None, limit: int, keep=None,
     print(f"  range         {values[0]:.3f} … {values[-1]:.3f} {unit}")
     print(f"  median        {values[len(values) // 2]:.3f} {unit}")
 
+
+#: Distance under which a cote endpoint counts as sitting ON a drawn line.
+ON_LINE = 0.005
+
+#: Half the thickness of an ordinary wall. A cote landing here terminates where
+#: nothing is drawn, which is what an axis is.
+HALF_WALL = (0.06, 0.13)
+
+#: Metres per spatial-hash cell. Nothing is compared across a cell boundary,
+#: which both fixes the contamination described below and makes the pass fast.
+CELL = 50.0
+
+
+def report_convention(msp, to_m, keep, band) -> None:
+    """Whether cotes measure to the wall FACE or to its AXIS — by geometry.
+
+    A `DIMENSION` stores `defpoint2` and `defpoint3`, the model-space points its
+    extension lines spring from. So the question needs no guessing from whether
+    the values look round: ask what is AT the point where the cote terminates.
+    On a drawn line, and it measures face to face. Half a wall away from any
+    line, and it measures axis to axis — an axis is imaginary, so nothing is
+    drawn there.
+
+    This replaced a test that scored how many cotes landed on a 10 cm grid.
+    That was a proxy: it called ENNAKHIL "a lean" at 34% where this says 76% on
+    the line, and on NOUR it gave no signal at all.
+
+    Comparison is bucketed by a 50 m spatial cell. Without it, NOUR reported a
+    median distance of 96.9 m: its sheet regions sit ~100 m apart and
+    `_Murs - Exterieurs` belongs to the elevation, so plan cotes were being
+    measured against facade walls.
+    """
+    _rule("CONVENTION  (axis or face, from the geometry)")
     if not to_m:
-        print("\n  No unit declared, so the room-scale band below cannot be applied.")
+        print("  no unit declared — distances would be meaningless")
         return
 
-    # ROOM SCALE. The first pass banded 0.5-12 m and reported 6% on a 5 cm grid,
-    # which measured nothing: NOUR's median cote is 0.625 m, so that band is
-    # overwhelmingly door leaves, wall offsets and opening widths, and a band up
-    # to 12 m also swallows whole-building runs. A room's clear side is what
-    # carries the convention.
-    low, high = band
-    room = [v for v in values if low <= v <= high]
-    print(f"\n  room-scale    {len(room)} cotes between {low:.1f} and {high:.1f} m")
-    if len(room) < 20:
-        print("  too few to read a convention from. Widen --band, or take it off")
-        print("  the drawing by eye.")
+    grid: dict[tuple[int, int], list] = defaultdict(list)
+    points: list[tuple[float, float]] = []
+    segments = 0
+
+    for entity in msp:
+        kind = entity.dxftype()
+        # EVERY line, not the ones on a layer guessed to be walls. An earlier
+        # version took a --walls regex, and on NOUR the obvious /mur/ matched
+        # `_Murs - Exterieurs` — the ELEVATION's walls — leaving 382 lines for
+        # 3712 cote ends. Which layer a cote terminates on is the thing to
+        # report, not the thing to require as an argument.
+        # LINE *and* LWPOLYLINE. A wall is not always two lines: NOUR draws its
+        # as filled polygons and hatch, so its plan regions hold 3716 lines for
+        # 3712 cote ends and the cotes appeared to terminate on ESCALIER and
+        # SANETAIRE — never on a wall, because no wall was in the comparison.
+        if kind in ("LINE", "LWPOLYLINE"):
+            if not _keep(entity, keep):
+                continue
+            layer = entity.dxf.layer or "?"
+            if kind == "LINE":
+                a, b = entity.dxf.start, entity.dxf.end
+                edges = [(a[0], a[1], b[0], b[1])]
+            else:
+                try:
+                    pts = [(p[0], p[1]) for p in entity.get_points("xy")]
+                except (AttributeError, IndexError, ValueError):
+                    continue
+                if entity.closed and len(pts) > 2:
+                    pts.append(pts[0])
+                edges = [(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1])
+                         for i in range(len(pts) - 1)]
+            for x0, y0, x1, y1 in edges:
+                seg = (x0, y0, x1, y1, layer)
+                segments += 1
+                for cx in range(int(min(x0, x1) // CELL), int(max(x0, x1) // CELL) + 1):
+                    for cy in range(int(min(y0, y1) // CELL), int(max(y0, y1) // CELL) + 1):
+                        grid[(cx, cy)].append(seg)
+        elif kind == "DIMENSION":
+            if not _keep(entity, keep):
+                continue
+            try:
+                measured = entity.get_measurement()
+            except Exception:
+                continue
+            if not isinstance(measured, (int, float)):
+                continue
+            if not band[0] <= measured * to_m <= band[1]:
+                continue
+            for attr in ("defpoint2", "defpoint3"):
+                if entity.dxf.hasattr(attr):
+                    p = entity.dxf.get(attr)
+                    points.append((p[0], p[1]))
+
+    print(f"  edges         {segments}  from LINE and LWPOLYLINE on every layer kept")
+    print(f"  cote ends     {len(points)}  from cotes {band[0]:.1f}–{band[1]:.1f} m")
+    if not segments or not points:
+        print("\n  Not enough to measure. Check --walls against the layer list above.")
         return
 
-    # Count in whole millimetres. Testing `v / grid` against its own rounding
-    # made the 5 cm grid report FEWER hits than the 10 cm grid — impossible,
-    # since every 10 cm value is a 5 cm value — because the float division
-    # carried different error at each grid. Integers cannot do that.
-    mm = [int(round(v * 1000)) for v in room]
-    for step, name in ((100, "10 cm"), (50, "5 cm"), (10, "1 cm")):
-        on = sum(1 for v in mm if v % step == 0)
-        print(f"  on a {name:<6} grid  {on:>5}/{len(room)}  ({100.0 * on / len(room):.0f}%)")
+    distances, orphans = [], 0
+    for px, py in points:
+        cx, cy = int(px // CELL), int(py // CELL)
+        near = []
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                near.extend(grid.get((cx + dx, cy + dy), ()))
+        if not near:
+            orphans += 1
+            continue
+        distances.append(_nearest(px, py, near))
 
-    # THE DECIDING EVIDENCE. A cote to the wall FACE is a value the architect
-    # CHOSE — 3.00, 3.20, 3.50 — so the centimetres past the last 10 cm pile up
-    # at zero. A cote to the AXIS is that chosen value plus half a wall at each
-    # end, so the pile moves to the wall's half-thickness: +10 cm for a pair of
-    # 10 cm cloisons, +15 for a cloison and a 20 cm porteur.
-    # Bucketed from the same millimetre values as the grid counts above. Taken
-    # from a separately centimetre-rounded list, the +0 bar read 265 while the
-    # exact 10 cm grid read 231 — two numbers for one quantity, and no way to
-    # tell which the reader should believe.
-    offsets = Counter((v % 100) // 10 for v in mm)
-    print("\n  centimetres past the last 10 cm (1 cm buckets):")
-    worst = max(offsets.values())
-    for cm in range(10):
-        n = offsets.get(cm, 0)
-        bar = "#" * int(round(28 * n / worst)) if worst else ""
-        print(f"    +{cm} cm {n:>5}  {bar}")
+    if orphans:
+        print(f"  orphaned      {orphans} with no wall inside {CELL:.0f} m")
+    if not distances:
+        print("\n  No cote shares a neighbourhood with a wall. Wrong --walls layer,")
+        print("  or the cotes belong to a drawing whose walls are elsewhere.")
+        return
 
-    print("\n  commonest exact values:")
-    exact = Counter(v / 1000.0 for v in mm)
-    for value, n in exact.most_common(12):
-        print(f"    {value:>7.2f} m  x{n}")
+    touching = Counter(layer for d, layer in distances if d < ON_LINE)
+    distances = sorted(d for d, _ in distances)
+    on = sum(1 for d in distances if d < ON_LINE)
+    axis = sum(1 for d in distances if HALF_WALL[0] <= d <= HALF_WALL[1])
+    total = len(distances)
+    print(f"\n  median        {distances[total // 2]:.4f} m")
+    print(f"  on the line   {on:>6}  ({100.0 * on / total:.0f}%)   <{ON_LINE * 1000:.0f} mm  -> FACE")
+    print(f"  half a wall   {axis:>6}  ({100.0 * axis / total:.0f}%)   "
+          f"{HALF_WALL[0] * 100:.0f}–{HALF_WALL[1] * 100:.0f} cm  -> AXIS")
 
-    # How hard the tallest bar leans. A flat histogram means the cotes are
-    # measured off drawn geometry rather than chosen, and then neither reading
-    # is supported — saying "FACE" from a 32% pile would be inventing a finding.
-    cm, count = offsets.most_common(1)[0]
-    share = 100.0 * count / len(room)
-    even = len(room) / 10.0
-    strength = "decisive" if share >= 50 else "a lean" if share >= 30 else "no signal"
+    if touching:
+        print("\n  cotes terminate on these layers — this is where the walls are:")
+        for layer, n in touching.most_common(6):
+            print(f"    {layer[:40]:<40}{n:>6}")
 
-    print(f"\n  tallest bar   +{cm} cm at {share:.0f}%  (flat would be 10%) — {strength}")
-    if strength == "no signal":
-        print("  The cotes are spread across every centimetre, so they are measured")
-        print("  off the geometry rather than chosen. This test cannot settle the")
-        print("  convention; take it off the drawing, or from whoever drew it.")
-    elif cm == 0:
-        print("  Values somebody CHOSE, which is what a cote to the FACE looks like.")
-        print(f"  {count} of {len(room)} land on a whole 10 cm. Confirm on the drawing.")
+    # Share and ratio are different questions and NOUR separates them: 29% on
+    # the line against 7% half a wall in is four to one, but two thirds of its
+    # cotes land on neither, so the ratio is worth reporting and the share is
+    # not yet worth trusting alone.
+    ratio = (on / axis) if axis else float("inf") if on else 0.0
+    if on > total * 0.4 and on >= 2 * axis:
+        print("\n  FACE. Cotes terminate on drawn wall lines.")
+    elif axis > total * 0.4 and axis >= 2 * on:
+        print("\n  AXIS. Cotes terminate where nothing is drawn, half a wall in.")
+    elif on >= 3 * axis and on > total * 0.15:
+        print(f"\n  Leans FACE, {ratio:.0f} to 1 — but only {100.0 * on / total:.0f}% land")
+        print("  cleanly, so corroborate on the drawing before recording it.")
+    elif axis >= 3 * on and axis > total * 0.15:
+        print(f"\n  Leans AXIS, {1 / ratio if ratio else 0:.0f} to 1 — but only "
+              f"{100.0 * axis / total:.0f}% land")
+        print("  cleanly, so corroborate on the drawing before recording it.")
     else:
-        print(f"  Not at zero. That is what a cote to the AXIS looks like — a chosen")
-        print(f"  value plus half a wall at each end, here +{cm} cm. Check it against")
-        print("  the wall thicknesses before recording it.")
+        print("\n  Not settled — neither reading dominates. Record it by eye.")
+
+
+def _nearest(px: float, py: float, segments) -> tuple[float, str]:
+    """Distance from a point to the closest segment, and that segment's layer.
+
+    The layer is the useful half: it names which layer the cotes are actually
+    measuring against, which is what tells you where the walls are.
+    """
+    best, best_layer = float("inf"), "?"
+    for x0, y0, x1, y1, layer in segments:
+        dx, dy = x1 - x0, y1 - y0
+        length = dx * dx + dy * dy
+        t = 0.0 if length == 0 else max(
+            0.0, min(1.0, ((px - x0) * dx + (py - y0) * dy) / length)
+        )
+        d = math.hypot(x0 + t * dx - px, y0 + t * dy - py)
+        if d < best:
+            best, best_layer = d, layer
+    return best, best_layer
 
 
 def main() -> None:
@@ -739,6 +851,7 @@ def main() -> None:
     report_blocks(doc, msp, args.blocks)
     report_labels(msp, args.labels, keep)
     report_dimensions(msp, to_m, args.labels, keep, tuple(args.band))
+    report_convention(msp, to_m, keep, tuple(args.band))
 
     _rule("WHAT TO DO WITH THIS")
     print("  Paste this output back, or hand it to planfgen-regs in a session on")
