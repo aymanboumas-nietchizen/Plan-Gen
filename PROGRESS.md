@@ -942,3 +942,37 @@ Also:     `Salon Marocain` (12) is a room type the engine does not have. It is
 Trap:     ENNAKHIL extents are 104856 x 955 m. It carries `FACADE PRINCIPALE`,
           `FACADE ARRIERE` and `COUPE A-A` in the same modelspace as the plans,
           so an extractor must filter by region, not just read modelspace.
+
+---
+
+## S20d — Ignore the elevations, measure the plans           2026-09-12
+
+Why:      Corrected by the architect: a *planche permis* carries plans, facades
+          and coupes on one sheet. Measuring rooms off it means reading the plan
+          regions only — an elevation's "rooms" are storey bands.
+Built:    Two filters in `inspect_dxf.py`, both additive and both off by default
+          except the layer one.
+          `--exclude-layers` (default `facade|coupe|section|cartouche|reperage|
+          elevation`) is EXACT and is the one that works: ENNAKHIL draws its
+          elevations on `FACADE` and sections on `COUPE`. Room-shaped polylines
+          79 -> 44 and the `FACADE` layer's 66 disappear.
+          `--plans-only` splits modelspace into 2-D regions on empty space and
+          keeps the plan ones. It removed the 394940 m2 `REPERAGE` outlier.
+Learned:  Three bugs, each only visible against a real drawing.
+          1. Clustering on x ALONE merged a plan with the elevation above it; a
+             planche is a GRID, so split x then split each column on y.
+          2. `\bplan\b` and `\bcoupe\b` miss the cartouche's PLURALS, so of
+             "PLANS FACADES COUPES" only facade matched, the legend looked like
+             a single-kind title, and every region was classified elevation.
+          3. ENNAKHIL'S PLANS CARRY NO SHEET TITLE. Only the facades and coupes
+             are titled, so title-based classification found no plan anywhere.
+             ROOM LABELS decide first now: three distinct room names in a region
+             makes it a plan whatever its title says. That found `PLAN TERRASSE`
+             and `PLAN FONDATION`.
+LIMIT:    Region splitting stays heuristic — the big regions still merge a plan
+          with its elevation, which is why layer exclusion is the primary lever
+          and regions the fallback for files whose layers do not say.
+Typology: `Salon Marocain` IS a `SEJOUR`, corrected by the architect — and a
+          Moroccan dwelling may have BOTH it and a separate sejour. So no new
+          RoomType; what it means is that two SEJOUR-kind rooms in one programme
+          is normal typology and must not be read as a duplicate. For regs.

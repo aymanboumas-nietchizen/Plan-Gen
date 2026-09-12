@@ -33,6 +33,7 @@ import argparse
 import glob
 import math
 import os
+import re
 import sys
 from collections import Counter, defaultdict
 
@@ -147,6 +148,234 @@ def _rule(title: str) -> None:
     print("-" * len(title))
 
 
+def _keep(entity, ranges) -> bool:
+    """True when the entity lies in one of the accepted x ranges.
+
+    `ranges` of None accepts everything, so the default behaviour of every pass
+    is unchanged and --plans-only is purely additive.
+    """
+    if EXCLUDE_RE is not None:
+        try:
+            if EXCLUDE_RE.search(entity.dxf.layer or ""):
+                return False
+        except AttributeError:
+            pass
+    if ranges is None:
+        return True
+    p = _point_of(entity)
+    if p is None:
+        return False
+    return any(x0 <= p[0] <= x1 and y0 <= p[1] <= y1
+               for x0, x1, y0, y1 in ranges)
+
+
+# --- sheets -----------------------------------------------------------------
+#
+# A *planche permis* is one sheet carrying plans, elevations and sections side
+# by side in the same modelspace. Measuring rooms off it means reading only the
+# plan regions: an elevation's "rooms" are storey bands and a section's are
+# nothing at all. ENNAKHIL reports extents of 104856 x 955 m for exactly this
+# reason — the drawings are laid out across the sheet, plus stray geometry.
+
+#: Layers that are never part of a plan. Exact where region clustering is only
+#: heuristic: ENNAKHIL draws its elevations on FACADE and its sections on COUPE,
+#: so excluding them is certain, while a spatial gap still merges a plan with
+#: the elevation drawn above it. Regions remain the fallback for files whose
+#: layers do not say.
+NOT_PLAN_LAYERS = re.compile(
+    r"fa[cç]ade|coupe|section|cartouche|rep[ée]rage|elevation", re.I
+)
+
+#: Set from --exclude-layers. None disables layer exclusion entirely.
+EXCLUDE_RE: re.Pattern | None = None
+
+
+#: A layer whose text belongs to the sheet, not to any drawing on it.
+CARTOUCHE = re.compile(r"cartouche|titre|title", re.I)
+
+#: A title that classifies the region it sits in.
+#: Every pattern must admit the PLURAL. The cartouche reads "PLANS FACADES
+#: COUPES", and with `\bplan\b` and `\bcoupe\b` only the facade pattern matched,
+#: so the legend looked like a single-kind title and classified the whole
+#: drawing as elevation.
+SHEET_KINDS = (
+    ("elevation", re.compile(r"\bfa[cç]ades?\b|\belevations?\b|\bpignons?\b", re.I)),
+    ("section", re.compile(r"\bcoupes?\b|\bsections?\b", re.I)),
+    ("detail", re.compile(r"\bd[ée]tails?\b|\bcartouches?\b|\brep[ée]rages?\b", re.I)),
+    ("plan", re.compile(r"\bplans?\b|\bniv\s*[:.]|\br\.?d\.?c\b|\b[ée]tages?\b"
+                        r"|\bmezzanines?\b|\bsous.?sols?\b|\bterrasses?\b", re.I)),
+)
+
+
+def _point_of(entity) -> tuple[float, float] | None:
+    """One representative point per entity, without computing a bounding box.
+
+    `ezdxf.bbox` is correct and far too slow for 300k entities; placing each
+    entity by a single vertex is enough to cluster sheets, which are metres
+    apart.
+    """
+    d = entity.dxf
+    for attr in ("insert", "start", "center", "location"):
+        if d.hasattr(attr):
+            try:
+                p = d.get(attr)
+                return (float(p[0]), float(p[1]))
+            except (TypeError, IndexError, ValueError):
+                return None
+    if entity.dxftype() == "LWPOLYLINE":
+        try:
+            pts = entity.get_points("xy")
+            return (float(pts[0][0]), float(pts[0][1])) if pts else None
+        except (AttributeError, IndexError, ValueError):
+            return None
+    return None
+
+
+def _is_legend(title: str) -> bool:
+    """True for a title block listing the sheet's contents rather than naming one
+    drawing.
+
+    ENNAKHIL's cartouche reads "■ PLANS ■ FACADES ■ COUPES". It names every kind
+    at once and sits inside every region, so taken as a title it classified the
+    whole drawing as elevation. A string matching more than one kind is a legend,
+    not a title, and carries no information about the region it happens to land in.
+    """
+    return sum(1 for _, pattern in SHEET_KINDS if pattern.search(title)) > 1
+
+
+#: Distinct room labels that make a region a plan whatever its title says.
+ROOM_EVIDENCE = 3
+
+
+def _classify(titles: list[str]) -> str:
+    """What kind of drawing a region is, from the text inside it.
+
+    ROOM LABELS DECIDE FIRST. ENNAKHIL's plans carry no sheet title at all — the
+    only titled regions are `FACADE PRINCIPALE`, `FACADE ARRIERE` and
+    `COUPE A-A` — so classifying on titles alone found no plan anywhere and
+    `--plans-only` had nothing to select. A region holding `Chambre 1`,
+    `Cuisine` and `SDB` is a plan; no elevation has three room names scattered
+    across it. That is the stronger signal and it costs nothing, because the
+    labels are already collected.
+
+    Failing that, fall back to the sheet title, where elevation and section beat
+    plan: a region titled "COUPE A-A" may also carry the word "plan" in a note,
+    and reading a section as a plan is the error that silently corrupts a
+    measurement.
+    """
+    usable = [t for t in titles if not _is_legend(t)]
+    rooms = {
+        t.lower() for t in usable
+        if any(word in t.lower() for word in ROOM_WORDS)
+    }
+    if len(rooms) >= ROOM_EVIDENCE:
+        return "plan"
+    for kind, pattern in SHEET_KINDS:
+        if any(pattern.search(t) for t in usable):
+            return kind
+    return "unknown"
+
+
+def find_sheets(msp, to_m: float | None, gap: float = 15.0):
+    """Split modelspace into regions separated by empty space, and name them.
+
+    Returns a list of (kind, x0, x1, count, titles). `gap` is in metres: sheets
+    on a planche sit well apart, while everything within one drawing is
+    continuous.
+    """
+    points, titles = [], []
+    for entity in msp:
+        p = _point_of(entity)
+        if p is None:
+            continue
+        points.append(p)
+        kind = entity.dxftype()
+        if kind in ("TEXT", "MTEXT"):
+            # Text on the title block describes the sheet, not the drawing it
+            # sits over. ENNAKHIL keeps it on a CARTOUCHE layer, which is the
+            # cheapest signal available.
+            if CARTOUCHE.search(entity.dxf.layer or ""):
+                continue
+            try:
+                text = entity.plain_text() if kind == "MTEXT" else entity.dxf.text
+            except Exception:
+                continue
+            text = " ".join(text.split())
+            if text and len(text) <= 40:
+                titles.append((p[0], p[1], text))
+    if not points:
+        return []
+
+    scale = to_m or 1.0
+
+    def split(values: list[float]) -> list[list[float]]:
+        """One dimension, broken wherever `gap` metres of nothing separate two
+        values."""
+        values = sorted(values)
+        groups: list[list[float]] = [[values[0]]]
+        for v in values[1:]:
+            if (v - groups[-1][-1]) * scale > gap:
+                groups.append([v])
+            else:
+                groups[-1].append(v)
+        return groups
+
+    # A planche lays its drawings out in a GRID, so splitting on x alone merges
+    # a plan with the elevation above it and the elevation's title wins. Split
+    # on x, then split each column on y.
+    out = []
+    by_x: dict[int, list[tuple[float, float]]] = defaultdict(list)
+    columns = split([x for x, _ in points])
+    edges = [(c[0], c[-1]) for c in columns]
+    for x, y in points:
+        for i, (lo, hi) in enumerate(edges):
+            if lo <= x <= hi:
+                by_x[i].append((x, y))
+                break
+
+    for i, column in by_x.items():
+        for band in split([y for _, y in column]):
+            y0, y1 = band[0], band[-1]
+            x0, x1 = edges[i]
+            members = [(x, y) for x, y in column if y0 <= y <= y1]
+            inside = [t for tx, ty, t in titles
+                      if x0 <= tx <= x1 and y0 <= ty <= y1]
+            out.append((_classify(inside), x0, x1, y0, y1, len(members), inside))
+    return out
+
+
+def report_sheets(sheets, to_m: float | None, limit: int = 14) -> None:
+    _rule("SHEET REGIONS  (a planche permis holds plans, elevations and sections)")
+    if not sheets:
+        print("  could not place entities — no representative points found")
+        return
+    scale = to_m or 1.0
+    unit = "m" if to_m else "du"
+    kinds = Counter(k for k, *_ in sheets)
+    print("  " + "  ".join(f"{k} {n}" for k, n in kinds.most_common()))
+    print(f"\n  {'kind':<10}{'entities':>9}   {'centre (' + unit + ')':>20}   title")
+    for kind, x0, x1, y0, y1, count, titles in sorted(
+        sheets, key=lambda s: -s[5]
+    )[:limit]:
+        centre = f"{(x0 + x1) / 2 * scale:,.0f}, {(y0 + y1) / 2 * scale:,.0f}"
+        title = next(
+            (t for t in titles if not _is_legend(t) and _classify([t]) == kind),
+            titles[0] if titles else "-",
+        )
+        print(f"  {kind:<10}{count:>9}   {centre:>20}   {title[:34]}")
+    if len(sheets) > limit:
+        print(f"  … {len(sheets) - limit} more regions")
+
+    plans = [s for s in sheets if s[0] == "plan"]
+    other = [s for s in sheets if s[0] in ("elevation", "section", "detail")]
+    if other:
+        print(f"\n  {sum(s[5] for s in other)} entities are in elevation/section/detail")
+        print("  regions and must not be measured as plan. Use --plans-only.")
+    if not plans:
+        print("\n  NO REGION CLASSIFIED AS PLAN. Either the titles use other words,")
+        print("  or this file is elevations and sections only.")
+
+
 def report_file(path: str, doc, recovered: bool) -> float | None:
     """Header, units, extents. Returns metres per drawing unit, or None."""
     _rule("FILE")
@@ -212,7 +441,7 @@ def report_layers(msp, limit: int) -> None:
               f"(raise --layers to see them)")
 
 
-def report_rooms(msp, to_m: float | None, layer: str | None) -> None:
+def report_rooms(msp, to_m: float | None, layer: str | None, keep=None) -> None:
     """Closed polylines are room candidates. Their absence is the finding."""
     _rule("CLOSED POLYLINES  (room candidates)")
     areas: list[tuple[float, str]] = []
@@ -223,6 +452,8 @@ def report_rooms(msp, to_m: float | None, layer: str | None) -> None:
         if kind not in ("LWPOLYLINE", "POLYLINE"):
             continue
         if layer and entity.dxf.layer != layer:
+            continue
+        if not _keep(entity, keep):
             continue
         try:
             closed = entity.closed if kind == "LWPOLYLINE" else entity.is_closed
@@ -288,7 +519,7 @@ def report_blocks(doc, msp, limit: int) -> None:
         print(f"  {name[:40]:<40}{count:>8}")
 
 
-def report_labels(msp, limit: int) -> None:
+def report_labels(msp, limit: int, keep=None) -> None:
     """Text that names a room is what turns a rectangle into a CUISINE."""
     _rule("TEXT  (room labels)")
     hits: list[tuple[str, str]] = []
@@ -296,6 +527,8 @@ def report_labels(msp, limit: int) -> None:
     for entity in msp:
         kind = entity.dxftype()
         if kind not in ("TEXT", "MTEXT"):
+            continue
+        if not _keep(entity, keep):
             continue
         total += 1
         try:
@@ -323,13 +556,15 @@ def report_labels(msp, limit: int) -> None:
         print(f"    … {len(hits) - limit} more (raise --labels)")
 
 
-def report_dimensions(msp, to_m: float | None, limit: int) -> None:
+def report_dimensions(msp, to_m: float | None, limit: int, keep=None) -> None:
     """The evidence for axis-versus-face. This script does not decide it."""
     _rule("DIMENSIONS  (evidence for the axis / face question)")
     measurements: list[float] = []
     styles = Counter()
     for entity in msp:
         if entity.dxftype() != "DIMENSION":
+            continue
+        if not _keep(entity, keep):
             continue
         try:
             styles[entity.dxf.dimstyle] += 1
@@ -386,6 +621,14 @@ def main() -> None:
     parser.add_argument("--layers", type=int, default=25, help="layers to list")
     parser.add_argument("--labels", type=int, default=25, help="label samples")
     parser.add_argument("--blocks", type=int, default=15, help="blocks to list")
+    parser.add_argument("--plans-only", action="store_true",
+                        help="measure only regions classified as plan — a planche "
+                             "permis carries elevations and sections too")
+    parser.add_argument("--exclude-layers", metavar="REGEX",
+                        default=NOT_PLAN_LAYERS.pattern,
+                        help="layers never measured as plan; '' to disable")
+    parser.add_argument("--gap", type=float, default=15.0,
+                        help="metres of empty space that separate two sheet regions")
     args = parser.parse_args()
 
     if not os.path.exists(args.path):
@@ -397,10 +640,29 @@ def main() -> None:
 
     to_m = report_file(args.path, doc, recovered)
     report_layers(msp, args.layers)
-    report_rooms(msp, to_m, args.layer)
+
+    sheets = find_sheets(msp, to_m, args.gap)
+    report_sheets(sheets, to_m)
+
+    global EXCLUDE_RE
+    EXCLUDE_RE = re.compile(args.exclude_layers, re.I) if args.exclude_layers else None
+    if EXCLUDE_RE is not None:
+        print(f"\n  excluding layers matching /{args.exclude_layers}/")
+
+    keep = None
+    if args.plans_only:
+        keep = [(x0, x1, y0, y1)
+                for kind, x0, x1, y0, y1, _, _ in sheets if kind == "plan"]
+        if not keep:
+            sys.exit("\n--plans-only: no region classified as plan, "
+                     "nothing to measure.")
+        print(f"\n  --plans-only: measuring {len(keep)} plan region(s), "
+              f"ignoring the rest")
+
+    report_rooms(msp, to_m, args.layer, keep)
     report_blocks(doc, msp, args.blocks)
-    report_labels(msp, args.labels)
-    report_dimensions(msp, to_m, args.labels)
+    report_labels(msp, args.labels, keep)
+    report_dimensions(msp, to_m, args.labels, keep)
 
     _rule("WHAT TO DO WITH THIS")
     print("  Paste this output back, or hand it to planfgen-regs in a session on")
