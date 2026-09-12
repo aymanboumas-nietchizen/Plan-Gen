@@ -889,3 +889,28 @@ Labels:   Extractable only via `MTEXT.plain_text()` — raw `.dxf.text` is RTF-l
           `max_ratio` most needs. Either an abbreviation or unlabelled levels.
 Next:     Archicad 26/27/29 are installed. A `.pln` exported WITH ZONES gives room
           polygons, names and areas directly — the one thing this DXF lacks.
+
+---
+
+## S20b — The bedrooms were there, under an abbreviation      2026-09-12
+
+Corrected: S20 reported "NOT ONE `Chambre`" in NOUR II. Wrong twice — the file
+          labels them `CH.` and the probe read only MTEXT, not TEXT.
+Measured: 440 distinct short strings, 3006 labels. CHAMBRE-like: 172 in ten
+          forms — `CH.2` 40, `CH.1` 36, `CH.parent` 23, `CH . parent` 20,
+          `CH . 2` 16, `CH . 1` 16, `CH.Parent` 12, `CH` 4, `CH.3` 4,
+          `CH.parents` 1. Spacing and case are inconsistent; a matcher has to
+          normalise, not equate. `S.D.B` likewise went from 4 to 108.
+          Real inventory: CH 172, S.D.B 108, Terrasse 91, Cuisine 57, Salon 56,
+          Buanderie 55, Hall 32, W.C 25.
+Found:    LEVELS ARE LABELLED. `NIV:+0.30 / +5.20 / +8.30 / +11.40 / +14.50 /
+          +17.50` — six levels, ~3.1 m apart, RDC at +0.30 — and `HSD= 5.00`
+          and `HSD= 2.80` give the height under slab. So the file can be sliced
+          per storey, which is what S19's floor plate will want. Also `P.C.F
+          1/2H+F.P` and `PF1/2H`: fire ratings on doors and glazing.
+Verdict:  NOUR II is a GOOD source. Labels, levels, heights and 8274 dimensions
+          are all present. The one hard part stands: rooms are not closed
+          polylines, so faces must be recovered from the wall layers.
+Built:    `find_oda()` — ODA installs to a VERSIONED directory while ezdxf's
+          default option is the unversioned path, so a correct install would
+          still not be found. Globbed and set before use.

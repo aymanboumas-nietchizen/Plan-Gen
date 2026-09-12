@@ -30,6 +30,7 @@ Everything is read-only. The file is never modified.
 from __future__ import annotations
 
 import argparse
+import glob
 import math
 import os
 import sys
@@ -73,9 +74,34 @@ def _shoelace(points: list[tuple[float, float]]) -> float:
     return abs(total) / 2.0
 
 
-#: Where ezdxf's ODA addon looks for the converter. Printed in the error below
-#: so the fix is a download rather than a search.
+#: Where ezdxf's ODA addon looks by default. Printed in the error below so the
+#: fix is a download rather than a search.
 ODA_HINT = r"C:\Program Files\ODA\ODAFileConverter\ODAFileConverter.exe"
+
+#: Where it actually lands. The installer creates a VERSIONED directory —
+#: `ODA\ODAFileConverter 26.2.0\` — while ezdxf's default option is the
+#: unversioned path above, so a perfectly good install is still not found.
+ODA_GLOBS = (
+    r"C:\Program Files\ODA\*\ODAFileConverter.exe",
+    r"C:\Program Files (x86)\ODA\*\ODAFileConverter.exe",
+)
+
+
+def find_oda() -> str | None:
+    """Point ezdxf at the installed converter, whatever version it is.
+
+    Returns the path it will use, or None if the converter is not installed.
+    """
+    configured = ezdxf.options.get("odafc-addon", "win_exec_path").strip('"')
+    if configured and os.path.exists(configured):
+        return configured
+    for pattern in ODA_GLOBS:
+        found = sorted(glob.glob(pattern))
+        if found:
+            newest = found[-1]
+            ezdxf.options.set("odafc-addon", "win_exec_path", newest)
+            return newest
+    return None
 
 
 def _open(path: str):
@@ -89,17 +115,24 @@ def _open(path: str):
     if path.lower().endswith((".dwg", ".bak")):
         from ezdxf.addons import odafc
 
+        located = find_oda()
+        if located:
+            print(f"  converter     {located}")
         try:
             return odafc.readfile(path), False
         except Exception as exc:
             sys.exit(
                 f"cannot read {os.path.basename(path)}: {exc}\n\n"
-                f"DWG needs the free ODA File Converter, which ezdxf expects at\n"
+                "DWG needs the free ODA File Converter. Looked in:\n"
                 f"  {ODA_HINT}\n"
-                "Install it and this works unchanged. Or open the drawing in "
-                "Archicad or AutoCAD\nand save a DXF — but prefer exporting "
-                "Archicad ZONES, which carry room polygons\nwith their names and "
-                "areas, the one thing a DWG of wall lines does not."
+                "  " + ODA_GLOBS[0] + "   (versioned install)\n"
+                "  " + ODA_GLOBS[1] + "\n\n"
+                "Get it from https://www.opendesign.com/guestfiles/oda_file_converter\n"
+                "and this works unchanged — the version in the folder name does not\n"
+                "matter, it is found by pattern.\n\n"
+                "Or open the drawing in Archicad and save a DXF. Better still, export\n"
+                "Archicad ZONES: they carry room polygons with their names and areas,\n"
+                "which is the one thing a DWG of wall lines does not have."
             )
 
     try:
