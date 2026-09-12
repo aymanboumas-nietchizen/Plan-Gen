@@ -14,3 +14,18 @@ planfgen-v2-kit/
 # only the derived measurements in references/measured/ are committed.
 references/raw/*
 !references/raw/.gitkeep
+
+# Client drawings, wherever they land in the tree. The agency's work never
+# enters git; only anonymised derived measurements under references/measured/.
+# No CAD file was tracked when this was added, so nothing is hidden by it.
+# A deliberate fixture still goes in with `git add -f`.
+*.dwg
+*.dxf
+*.bak
+*.rar
+*.pln
+*.pln.lck
+
+# The agency drop as it landed, until it is moved into references/raw/.
+# Images are client work too — a plan de situation names the site.
+/RESIDENCE ENNAKHIL/

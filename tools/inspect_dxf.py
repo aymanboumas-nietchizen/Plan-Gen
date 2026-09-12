@@ -73,8 +73,35 @@ def _shoelace(points: list[tuple[float, float]]) -> float:
     return abs(total) / 2.0
 
 
+#: Where ezdxf's ODA addon looks for the converter. Printed in the error below
+#: so the fix is a download rather than a search.
+ODA_HINT = r"C:\Program Files\ODA\ODAFileConverter\ODAFileConverter.exe"
+
+
 def _open(path: str):
-    """Read the file, falling back to ezdxf's recovery reader for damaged ones."""
+    """Read the file, falling back to ezdxf's recovery reader for damaged ones.
+
+    DWG is not a format ezdxf reads. It is a closed binary format and there is no
+    pure-Python reader worth depending on, so the addon shells out to the free
+    ODA File Converter. `.bak` is AutoCAD's backup of a DWG and is the same
+    format, which is why it is routed the same way.
+    """
+    if path.lower().endswith((".dwg", ".bak")):
+        from ezdxf.addons import odafc
+
+        try:
+            return odafc.readfile(path), False
+        except Exception as exc:
+            sys.exit(
+                f"cannot read {os.path.basename(path)}: {exc}\n\n"
+                f"DWG needs the free ODA File Converter, which ezdxf expects at\n"
+                f"  {ODA_HINT}\n"
+                "Install it and this works unchanged. Or open the drawing in "
+                "Archicad or AutoCAD\nand save a DXF — but prefer exporting "
+                "Archicad ZONES, which carry room polygons\nwith their names and "
+                "areas, the one thing a DWG of wall lines does not."
+            )
+
     try:
         return ezdxf.readfile(path), False
     except ezdxf.DXFStructureError:

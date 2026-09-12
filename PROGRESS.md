@@ -865,3 +865,27 @@ Tested:   Against two real DXFs, which found two bugs. `$EXTMIN`/`$EXTMAX` are
           "-200000000000000000 m"; and a Windows console at cp1252 turned
           "Unités" into "Unit?s", which matters when every label is French.
 Next:     Run it at the agence on NOUR II - BAT 1 and read the three answers.
+
+---
+
+## S20 — DWG, and what the first agency file actually holds        2026-09-12
+
+Built:    `inspect_dxf.py` routes `.dwg`/`.bak` through `ezdxf.addons.odafc`, and
+          when the converter is absent says where it is expected and what to do.
+          `.gitignore` now covers `*.dwg *.dxf *.bak *.rar *.pln*` — the drawings
+          arrived in the repo ROOT, untracked, in a repo that was public.
+Measured: NOUR II - BAT 1 (210 MB, R2018, METRES, 201.7 x 596.7 m, six buildings).
+          8274 dimensions. Walls are layered: `_Murs - Exterieurs` 46115 entities.
+LIMIT:    ROOMS ARE NOT FACES. 4773 closed polylines but median area 0.16 m2 and
+          the largest is 17335 m2 on a joinery layer; `SANETAIRE` alone holds 1192
+          of them, which are WC and basin outlines. No room-polygon layer exists,
+          so faces must be recovered from wall lines — the bigger job.
+Also:     The largest layer is `www.BlocsAutocad.com`, 169350 entities, outweighing
+          the walls three to one. 10604 distinct blocks for 11334 placements, so
+          nothing is reused and apartments are not blocks.
+Labels:   Extractable only via `MTEXT.plain_text()` — raw `.dxf.text` is RTF-like
+          formatting. 384 labels, 24 distinct: Terrasse 91, Cuisine 57, Salon 56,
+          Hall 32, W.C 25, SDB 4. NOT ONE `Chambre`, which is the room type
+          `max_ratio` most needs. Either an abbreviation or unlabelled levels.
+Next:     Archicad 26/27/29 are installed. A `.pln` exported WITH ZONES gives room
+          polygons, names and areas directly — the one thing this DXF lacks.
