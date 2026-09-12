@@ -165,6 +165,27 @@ def barriers(msp, keep, walls: re.Pattern, snap: float):
                 if entity.closed and len(pts) > 2:
                     pts.append(pts[0])
                 add(pts, layer)
+            elif kind == "HATCH":
+                # A HATCHED WALL IS STILL A WALL. NOUR draws its plan walls as
+                # hatched regions — `2D - Dessin général` is 1132 HATCH against
+                # 862 LWPOLYLINE — so reading only the polylines gave 2327 edges
+                # for five plan regions of a six-building complex, and nothing
+                # but terraces closed: no chambre, no salon, no SDB. The hatch's
+                # boundary is the wall's outline and is ordinary geometry.
+                for path in entity.paths:
+                    try:
+                        if hasattr(path, "vertices"):
+                            pts = [(v[0], v[1]) for v in path.vertices]
+                            if getattr(path, "is_closed", False) and len(pts) > 2:
+                                pts.append(pts[0])
+                            add(pts, layer)
+                        else:
+                            for edge in getattr(path, "edges", ()):
+                                if edge.type == "LineEdge":
+                                    add([(edge.start[0], edge.start[1]),
+                                         (edge.end[0], edge.end[1])], layer)
+                    except Exception:
+                        continue
             elif kind in ("ARC", "CIRCLE", "ELLIPSE"):
                 add([(p[0], p[1]) for p in entity.flattening(snap)], layer)
                 # A DOOR SWING closes its own opening, but not by its arc.

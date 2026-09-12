@@ -1160,3 +1160,39 @@ Next:     A face holding several labels of the same kind is one room with
           several names, not a failure. Counting it as such is worth more than
           any further geometric repair — and it is a finding for planfgen-regs
           about what the engine must be able to express.
+
+---
+
+## S21c — NOUR: found the geometry, and caught the fragments  2026-09-12
+
+Measured: WHERE NOUR'S PLAN GEOMETRY LIVES, by counting layers INSIDE the plan
+          regions rather than guessing from the file-wide list:
+            2D - Cotations pour 100eme  8289  all DIMENSION
+            0                           8066  INSERT 6920, LWPOLYLINE 584
+            TEXTE                       2737  MTEXT 2422
+            2D - Dessin general          499  ALL LWPOLYLINE, no HATCH at all
+          The drawing is BLOCK REFERENCES ON LAYER 0. Adding `^0$` to --walls:
+          edges 2405 -> 47083, resolved 22% -> 90%, shared-a-face 1 -> 53,
+          measured 46 -> 103, and every interior type appeared where before only
+          terraces had closed.
+Wrong:    The hatch-boundary work before it was aimed at nothing. `2D - Dessin
+          general` in the plan regions is 499 LWPOLYLINE and ZERO hatch — the
+          1132 hatches are file-wide and live in the facade. Reading hatch
+          boundaries is a correct capability and costs ENNAKHIL nothing, but it
+          was never going to fix NOUR, and measuring the plan regions first
+          would have saved two runs.
+CAUGHT:   The 103 rooms are FRAGMENTS, not rooms. Median areas against the
+          decret: CHAMBRE 5.1 vs 9.0, SEJOUR 5.5 vs 12.0, CHAMBRE_PRINCIPALE
+          5.8 vs 12.0, CUISINE 4.7 vs 5.0 — all BELOW the legal minimum, which
+          a built and permitted building cannot be. Layer 0 carries the walls
+          AND the furniture blocks, so fixtures subdivide every room and the
+          label lands in one piece of it. The aspect ratios looked excellent
+          (CHAMBRE 1.58, SDB 1.18, WC 1.09) precisely because fragments are
+          blocky — plausible numbers on the wrong polygons.
+Note:     `MA_ECONOMIQUE.min_area` caught this, not the geometry. The engine's
+          own regulation profile works as an independent check on the extractor,
+          which is worth keeping: a measurement that violates the code it was
+          taken from is measuring something else.
+Next:     Separate walls from furniture inside layer 0. The block NAMES are the
+          lead — NOUR's commonest are `Symbole WC 22`, `Douche rectangulaire
+          22`, `Refrigerateur haut 22`, all plainly fixtures.
