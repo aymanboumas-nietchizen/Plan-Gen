@@ -1094,3 +1094,37 @@ Caught:   Deleting `report_blocks` by line range took one line too many and ate
           rather than by the parse.
 Size:     864 -> 839 lines. Verified: every section still prints, --plans-only
           still settles ENNAKHIL as FACE, and a plain DXF still reads.
+
+---
+
+## S21 — measure_reference.py: rooms recovered from walls      2026-09-12
+
+Built:    `tools/measure_reference.py`. Same idiom as the engine's L3 —
+          `shapely.ops.polygonize` over noded segments, as `fabric/graph.py:108`
+          does it — with three things the engine does not need because its walls
+          are clean by construction: coordinates snapped onto a tolerance grid
+          before noding, door geometry in the barrier set to close openings, and
+          every failure counted rather than dropped.
+FOUND:    THE DOORS ARE BLOCKS. ENNAKHIL's MENUISERIE layer is 5913 LINE, 835
+          LWPOLYLINE and 288 INSERT, and the swing geometry lives inside those
+          inserts. Reading modelspace only, no doorway ever closed and the whole
+          flat polygonized into ONE 165.5 m2 face holding SDB, Sejour and three
+          Chambres. Exploding via `virtual_entities()` took the resolve rate
+          from 26% to 82%. Nothing else moved it — an earlier guess that arc
+          radii would bridge the openings changed 958 faces to 990 and the
+          resolve rate not at all, because the arcs were inside the blocks too.
+Guards:   A face must be room-SHAPED as well as room-sized. Polygonize returns
+          the cavity between a wall's two lines as a face, and a label near a
+          wall lands in it: the first run reported an SDB at 8.85:1. `MIN_SIDE`
+          0.9 m and `FILL` 62% of the bounding box reject those.
+YIELD:    277 labels -> 228 resolved -> 25 MEASURED. Nine percent, and the
+          losses are the finding: 78 labels share a face (a doorway leaked and
+          merged two rooms), 49 land in no face at all, 17 fail the shape
+          guards. A `Sejour` at 19.18 x 3.08 m is still in the output and is
+          plainly a leak, so the numbers are not yet trustworthy per room.
+LIMIT:    A plan cannot be closed where the architect drew no door. Cased
+          openings and arches have no geometry to bridge, so those rooms merge
+          with the circulation by construction and no snapping fixes it.
+Next:     Either bridge openings by inference — a gap in a wall run shorter than
+          a door width is a doorway — or accept the yield and gather enough
+          plans that 9% is still a distribution.
