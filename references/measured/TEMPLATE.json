@@ -1,0 +1,68 @@
+{
+  "provenance": {
+    "ref": "casa-f3-001",
+    "city": "Casablanca",
+    "year": 2019,
+    "typologie": "F3",
+    "profile": "casablanca",
+
+    "source_kind": "dxf",
+    "dimensioning": "axis",
+    "wall_thickness": {"facade": 0.30, "porteur": 0.20, "cloison": 0.10},
+    "confidence_m": 0.005,
+
+    "unit_of": null,
+    "notes": "Anonymised. No client, address, project number or architect here."
+  },
+
+  "schema_version": 1,
+  "units": "m",
+
+  "parcel": {
+    "outline": [[0.0, 0.0], [12.0, 0.0], [12.0, 10.0], [0.0, 10.0]],
+    "north": 0.0,
+    "entry_edge": 0,
+    "edges": [
+      {"index": 0, "kind": "STREET",  "openable": true},
+      {"index": 1, "kind": "MITOYEN", "openable": false},
+      {"index": 2, "kind": "COURT",   "openable": true},
+      {"index": 3, "kind": "MITOYEN", "openable": false}
+    ]
+  },
+
+  "spaces": [
+    {
+      "nom": "Sejour",
+      "kind": "SEJOUR",
+      "x": 0.15, "y": 0.15, "w": 5.85, "h": 5.50,
+      "rectangular": true,
+      "outline": [[0.15, 0.15], [6.0, 0.15], [6.0, 5.65], [0.15, 5.65]],
+      "net_outline": [[0.30, 0.30], [5.90, 0.30], [5.90, 5.55], [0.30, 5.55]],
+      "net_w": 5.60, "net_h": 5.25,
+      "surface_utile": 29.40,
+      "axis_area": 32.18
+    }
+  ],
+
+  "walls": [
+    {
+      "p0": [0.0, 0.0], "p1": [12.0, 0.0],
+      "kind": "FACADE", "bearing": true,
+      "thickness": 0.30, "length": 12.0,
+      "stack_id": null
+    }
+  ],
+
+  "openings": {
+    "doors": [
+      {"wall": 0, "t": 0.5, "leaf": 0.80, "swing_into": "Sejour",
+       "swing_side": 1, "hinge": 0, "span": [5.6, 6.4], "position": [6.0, 0.0]}
+    ],
+    "windows": [
+      {"wall": 0, "t": 0.25, "width": 1.40, "allege": 1.00, "head": 2.20,
+       "span": [2.3, 3.7], "position": [3.0, 0.0], "glazing": 1.96}
+    ]
+  },
+
+  "totals": {"surface_utile": 29.40, "spaces": 1, "walls": 1}
+}
