@@ -1012,3 +1012,32 @@ Note:     The labels include `Adresse: 9 rue Figuig avenue Patrice Lumumba`.
           Identifying data is in the drawing text and would flow into a naive
           extraction, so the anonymisation rule on references/measured/ is not
           theoretical.
+
+---
+
+## S20f — Room-scale cotes, and what they do not settle      2026-09-12
+
+Built:    `report_dimensions` bands to ROOM_SCALE (2.0-8.0 m, `--band`), counts
+          the 10/5/1 cm grids, buckets the centimetres past the last 10 cm, and
+          lists the commonest exact values. The reasoning: a cote to the FACE is
+          a value the architect CHOSE, so it piles at +0; a cote to the AXIS is
+          that value plus half a wall at each end, so the pile moves to the
+          half-thickness.
+Result:   NOT SETTLED, and differently in each file.
+            ENNAKHIL  837 cotes, +0 cm at 34%, 10 cm grid 28%  -> a LEAN to face
+            NOUR     1856 cotes, +0 cm at 23%, 10 cm grid 15%  -> NO SIGNAL
+          NOUR's commonest values are 2.50 x59, 2.20 x47, 3.00 x44, 2.40 x42 —
+          round values exist and are the most frequent — but 77% sit off the
+          10 cm mark and +4 through +9 cm are all near-equal. Cotes measured off
+          drawn geometry rather than chosen. A verdict of "FACE" from a 23% bar
+          would have been an invented finding, so the tool now says so.
+Bugs:     Two in the test itself, both caught by the output contradicting itself.
+          The 5 cm grid reported FEWER hits than the 10 cm grid (158 vs 160),
+          which is impossible — `v / grid` against its own rounding carries
+          different float error per grid. Counted in whole millimetres it went
+          to 231 <= 239 <= 482, so the old figures were badly undercounting.
+          And the +0 bar read 265 while the exact 10 cm grid read 231: two
+          numbers for one quantity, because the histogram rounded to centimetres
+          first. Both now derive from one millimetre list.
+Next:     The convention has to come off the drawing by eye, or from whoever
+          drew it. references/README.md requires it per fixture either way.

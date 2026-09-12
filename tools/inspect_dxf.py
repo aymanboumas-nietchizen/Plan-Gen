@@ -250,6 +250,10 @@ def _is_legend(title: str) -> bool:
     return sum(1 for _, pattern in SHEET_KINDS if pattern.search(title)) > 1
 
 
+#: A room's clear side, in metres. Below this is a door leaf or a wall offset;
+#: above it is a whole-building run. Neither carries the dimensioning convention.
+ROOM_SCALE = (2.0, 8.0)
+
 #: Distinct room labels that make a region a plan whatever its title says.
 ROOM_EVIDENCE = 3
 
@@ -567,7 +571,8 @@ def report_labels(msp, limit: int, keep=None) -> None:
         print(f"    … {len(hits) - limit} more (raise --labels)")
 
 
-def report_dimensions(msp, to_m: float | None, limit: int, keep=None) -> None:
+def report_dimensions(msp, to_m: float | None, limit: int, keep=None,
+                      band: tuple[float, float] = ROOM_SCALE) -> None:
     """The evidence for axis-versus-face. This script does not decide it."""
     _rule("DIMENSIONS  (evidence for the axis / face question)")
     measurements: list[float] = []
@@ -604,17 +609,74 @@ def report_dimensions(msp, to_m: float | None, limit: int, keep=None) -> None:
     print(f"  range         {values[0]:.3f} … {values[-1]:.3f} {unit}")
     print(f"  median        {values[len(values) // 2]:.3f} {unit}")
 
-    # A cote to the wall FACE tends to land on round numbers (3.00, 3.20); one
-    # to the AXIS carries the half-thicknesses and rarely does. Weak evidence on
-    # its own, decisive alongside the drawing.
-    if to_m:
-        room_sized = [v for v in values if 0.5 <= v <= 12.0]
-        if room_sized:
-            round_5cm = sum(1 for v in room_sized if abs(v * 20 - round(v * 20)) < 1e-6)
-            share = 100.0 * round_5cm / len(room_sized)
-            print(f"  on a 5 cm grid {round_5cm}/{len(room_sized)}  ({share:.0f}%)")
-            print("                 a high share leans FACE, a low share leans AXIS —")
-            print("                 weak on its own, decisive with the drawing open")
+    if not to_m:
+        print("\n  No unit declared, so the room-scale band below cannot be applied.")
+        return
+
+    # ROOM SCALE. The first pass banded 0.5-12 m and reported 6% on a 5 cm grid,
+    # which measured nothing: NOUR's median cote is 0.625 m, so that band is
+    # overwhelmingly door leaves, wall offsets and opening widths, and a band up
+    # to 12 m also swallows whole-building runs. A room's clear side is what
+    # carries the convention.
+    low, high = band
+    room = [v for v in values if low <= v <= high]
+    print(f"\n  room-scale    {len(room)} cotes between {low:.1f} and {high:.1f} m")
+    if len(room) < 20:
+        print("  too few to read a convention from. Widen --band, or take it off")
+        print("  the drawing by eye.")
+        return
+
+    # Count in whole millimetres. Testing `v / grid` against its own rounding
+    # made the 5 cm grid report FEWER hits than the 10 cm grid — impossible,
+    # since every 10 cm value is a 5 cm value — because the float division
+    # carried different error at each grid. Integers cannot do that.
+    mm = [int(round(v * 1000)) for v in room]
+    for step, name in ((100, "10 cm"), (50, "5 cm"), (10, "1 cm")):
+        on = sum(1 for v in mm if v % step == 0)
+        print(f"  on a {name:<6} grid  {on:>5}/{len(room)}  ({100.0 * on / len(room):.0f}%)")
+
+    # THE DECIDING EVIDENCE. A cote to the wall FACE is a value the architect
+    # CHOSE — 3.00, 3.20, 3.50 — so the centimetres past the last 10 cm pile up
+    # at zero. A cote to the AXIS is that chosen value plus half a wall at each
+    # end, so the pile moves to the wall's half-thickness: +10 cm for a pair of
+    # 10 cm cloisons, +15 for a cloison and a 20 cm porteur.
+    # Bucketed from the same millimetre values as the grid counts above. Taken
+    # from a separately centimetre-rounded list, the +0 bar read 265 while the
+    # exact 10 cm grid read 231 — two numbers for one quantity, and no way to
+    # tell which the reader should believe.
+    offsets = Counter((v % 100) // 10 for v in mm)
+    print("\n  centimetres past the last 10 cm (1 cm buckets):")
+    worst = max(offsets.values())
+    for cm in range(10):
+        n = offsets.get(cm, 0)
+        bar = "#" * int(round(28 * n / worst)) if worst else ""
+        print(f"    +{cm} cm {n:>5}  {bar}")
+
+    print("\n  commonest exact values:")
+    exact = Counter(v / 1000.0 for v in mm)
+    for value, n in exact.most_common(12):
+        print(f"    {value:>7.2f} m  x{n}")
+
+    # How hard the tallest bar leans. A flat histogram means the cotes are
+    # measured off drawn geometry rather than chosen, and then neither reading
+    # is supported — saying "FACE" from a 32% pile would be inventing a finding.
+    cm, count = offsets.most_common(1)[0]
+    share = 100.0 * count / len(room)
+    even = len(room) / 10.0
+    strength = "decisive" if share >= 50 else "a lean" if share >= 30 else "no signal"
+
+    print(f"\n  tallest bar   +{cm} cm at {share:.0f}%  (flat would be 10%) — {strength}")
+    if strength == "no signal":
+        print("  The cotes are spread across every centimetre, so they are measured")
+        print("  off the geometry rather than chosen. This test cannot settle the")
+        print("  convention; take it off the drawing, or from whoever drew it.")
+    elif cm == 0:
+        print("  Values somebody CHOSE, which is what a cote to the FACE looks like.")
+        print(f"  {count} of {len(room)} land on a whole 10 cm. Confirm on the drawing.")
+    else:
+        print(f"  Not at zero. That is what a cote to the AXIS looks like — a chosen")
+        print(f"  value plus half a wall at each end, here +{cm} cm. Check it against")
+        print("  the wall thicknesses before recording it.")
 
 
 def main() -> None:
@@ -638,6 +700,9 @@ def main() -> None:
     parser.add_argument("--exclude-layers", metavar="REGEX",
                         default=NOT_PLAN_LAYERS.pattern,
                         help="layers never measured as plan; '' to disable")
+    parser.add_argument("--band", type=float, nargs=2, default=list(ROOM_SCALE),
+                        metavar=("LOW", "HIGH"),
+                        help="room-scale cote band in metres, for axis/face")
     parser.add_argument("--gap", type=float, default=15.0,
                         help="metres of empty space that separate two sheet regions")
     args = parser.parse_args()
@@ -673,7 +738,7 @@ def main() -> None:
     report_rooms(msp, to_m, args.layer, keep)
     report_blocks(doc, msp, args.blocks)
     report_labels(msp, args.labels, keep)
-    report_dimensions(msp, to_m, args.labels, keep)
+    report_dimensions(msp, to_m, args.labels, keep, tuple(args.band))
 
     _rule("WHAT TO DO WITH THIS")
     print("  Paste this output back, or hand it to planfgen-regs in a session on")
