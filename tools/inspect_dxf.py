@@ -1,7 +1,6 @@
 """What is actually inside an agency DXF, before anyone writes an extractor.
 
     python tools/inspect_dxf.py "references/raw/NOUR II - BAT 1 - PC 30-10-2024.dxf"
-    python tools/inspect_dxf.py <file> --layer MUR          # drill into one layer
     python tools/inspect_dxf.py <file> --labels 60          # more label samples
 
 Reconnaissance, not extraction. A permis-de-construire drawing of a whole
@@ -465,7 +464,7 @@ def report_layers(msp, limit: int) -> None:
               f"(raise --layers to see them)")
 
 
-def report_rooms(msp, to_m: float | None, layer: str | None, keep=None) -> None:
+def report_rooms(msp, to_m: float | None, keep=None) -> None:
     """Closed polylines are room candidates. Their absence is the finding."""
     _rule("CLOSED POLYLINES  (room candidates)")
     areas: list[tuple[float, str]] = []
@@ -474,8 +473,6 @@ def report_rooms(msp, to_m: float | None, layer: str | None, keep=None) -> None:
     for entity in msp:
         kind = entity.dxftype()
         if kind not in ("LWPOLYLINE", "POLYLINE"):
-            continue
-        if layer and entity.dxf.layer != layer:
             continue
         if not _keep(entity, keep):
             continue
@@ -522,25 +519,6 @@ def report_rooms(msp, to_m: float | None, layer: str | None, keep=None) -> None:
     print("\n  closed polylines by layer:")
     for name, count in by_layer.most_common(8):
         print(f"    {name[:38]:<38}{count:>6}")
-
-
-def report_blocks(doc, msp, limit: int) -> None:
-    """A plate often repeats one apartment as a block. That is free structure."""
-    _rule("BLOCKS  (a repeated apartment is usually one)")
-    inserts = Counter()
-    for entity in msp:
-        if entity.dxftype() == "INSERT":
-            try:
-                inserts[entity.dxf.name] += 1
-            except AttributeError:
-                continue
-    if not inserts:
-        print("  no block references in modelspace")
-        return
-    print(f"  {len(inserts)} distinct blocks, {sum(inserts.values())} placements")
-    print(f"\n  {'block':<40}{'placed':>8}")
-    for name, count in inserts.most_common(limit):
-        print(f"  {name[:40]:<40}{count:>8}")
 
 
 def report_labels(msp, limit: int, keep=None) -> None:
@@ -802,10 +780,8 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("path", help="the .dxf to inspect (never modified)")
-    parser.add_argument("--layer", help="restrict the polyline pass to one layer")
     parser.add_argument("--layers", type=int, default=25, help="layers to list")
     parser.add_argument("--labels", type=int, default=25, help="label samples")
-    parser.add_argument("--blocks", type=int, default=15, help="blocks to list")
     parser.add_argument("--plans-only", action="store_true",
                         help="measure only regions classified as plan — a planche "
                              "permis carries elevations and sections too")
@@ -847,8 +823,7 @@ def main() -> None:
         print(f"\n  --plans-only: measuring {len(keep)} plan region(s), "
               f"ignoring the rest")
 
-    report_rooms(msp, to_m, args.layer, keep)
-    report_blocks(doc, msp, args.blocks)
+    report_rooms(msp, to_m, keep)
     report_labels(msp, args.labels, keep)
     report_dimensions(msp, to_m, args.labels, keep, tuple(args.band))
     report_convention(msp, to_m, keep, tuple(args.band))

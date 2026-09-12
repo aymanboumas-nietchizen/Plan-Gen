@@ -1074,3 +1074,23 @@ Learned:  Four defects, and the number climbed at each fix — 34 -> 76 -> 87 ->
              included, NOUR's plan walls show up on `2D - Dessin general`.
 Next:     `provenance.dimensioning` can be filled automatically for ENNAKHIL.
           NOUR needs one room checked by eye against its walls.
+
+---
+
+## S20h — Cutting what the file no longer needs               2026-09-12
+
+Cut:      `report_blocks` and `--blocks`; `--layer`. The block pass had answered
+          its question on both files and would answer it the same way again —
+          apartments are not blocks: NOUR has 10604 distinct blocks for 11334
+          placements, ENNAKHIL 162 for 2475, and the commonest in both are
+          fixtures. A pass that can only repeat a settled answer is weight.
+          `--layer` drilled the polyline pass into one layer and was never used
+          once across five sessions on two real files.
+Caught:   Deleting `report_blocks` by line range took one line too many and ate
+          `report_labels`'s signature, leaving its body attached to the previous
+          function. The syntax was still VALID — it ran as far as the label pass
+          before `NameError: name 'limit' is not defined`. Line-range deletes
+          are how that happens; it was caught by running the tool end to end
+          rather than by the parse.
+Size:     864 -> 839 lines. Verified: every section still prints, --plans-only
+          still settles ENNAKHIL as FACE, and a plain DXF still reads.
