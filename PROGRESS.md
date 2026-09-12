@@ -914,3 +914,31 @@ Verdict:  NOUR II is a GOOD source. Labels, levels, heights and 8274 dimensions
 Built:    `find_oda()` — ODA installs to a VERSIONED directory while ezdxf's
           default option is the unversioned path, so a correct install would
           still not be found. Globbed and set before use.
+
+---
+
+## S20c — Two real files, neither draws rooms as faces        2026-09-12
+
+Ran:      `inspect_dxf.py` on RESIDENCE ENNAKHIL - PLAN (9.5 MB DWG) through the
+          ODA converter, found at `ODAFileConverter 27.1.0` — VERSIONED, as the
+          glob anticipated; the unversioned default would have failed.
+Compared: ENNAKHIL is the better-drawn file and NOUR II the richer one.
+            labels      `Chambre 1/2/3/parents`, 4 clean forms  vs  `CH.` in 10
+                        inconsistent forms needing normalisation
+            blocks      162 distinct / 2475 placed (healthy reuse)  vs
+                        10604 / 11334 (nothing reused, apartments not blocks)
+            pollution   none  vs  `www.BlocsAutocad.com` 169350 entities,
+                        outweighing the walls three to one
+            walls       `MUR` 8827 (8347 LINEs)  vs  `_Murs - Exterieurs` 46115
+            dimensions  3055  vs  8274
+FINDING:  ROOMS ARE NOT FACES IN EITHER. ENNAKHIL: 1279 closed polylines, median
+          0.00 m2, only 81 in the 1-60 m2 band, and `MUR` holds 14 of them
+          against 8347 lines. Two independent agency files agreeing makes this a
+          property of how architects draw, not an accident of one file. Face
+          recovery from wall lines is the corpus track, not a nice-to-have.
+Also:     `Salon Marocain` (12) is a room type the engine does not have. It is
+          not a `SEJOUR` — the banquettes line the walls, so its proportion and
+          furniture rule differ. For planfgen-regs.
+Trap:     ENNAKHIL extents are 104856 x 955 m. It carries `FACADE PRINCIPALE`,
+          `FACADE ARRIERE` and `COUPE A-A` in the same modelspace as the plans,
+          so an extractor must filter by region, not just read modelspace.
