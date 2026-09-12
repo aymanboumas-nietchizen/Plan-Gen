@@ -39,6 +39,7 @@ Read-only. The drawing is never modified.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import re
 import statistics
@@ -183,6 +184,123 @@ def barriers(msp, keep, walls: re.Pattern, snap: float):
     return lines, used
 
 
+#: The width of an opening worth bridging. A door leaf is 0.70–0.90 m and a
+#: cased opening between a sejour and a hall runs wider; past the upper bound it
+#: is not an opening, it is the room.
+OPENING = (0.55, 2.10)
+
+#: How near to collinear the bridge must be with the wall it continues, in
+#: degrees. The gap left by a doorway sits on ONE straight wall line, so the
+#: bridge runs along that line at both ends. Requiring it at both is what stops
+#: this joining two unrelated walls across a room.
+COLLINEAR = 18.0
+
+#: Loose ends closer than this are the same corner drawn twice, and are welded
+#: shut without asking anything about direction. Measured: on ENNAKHIL the
+#: nearest other loose end is 4 cm away at the median. Kept under half a cloison
+#: so it cannot weld a wall's two faces together.
+STITCH = 0.25
+
+
+def _ends(line: LineString):
+    """Each end of a line, with the unit vector pointing out of it.
+
+    The outward direction is the direction the wall would carry on in if it had
+    not stopped — which is exactly where a doorway's far jamb lies.
+    """
+    pts = list(line.coords)
+    for near, far in ((pts[0], pts[1]), (pts[-1], pts[-2])):
+        dx, dy = near[0] - far[0], near[1] - far[1]
+        length = (dx * dx + dy * dy) ** 0.5
+        if length > 0:
+            yield (round(near[0], 6), round(near[1], 6)), (dx / length, dy / length)
+
+
+def bridge_openings(lines: list[LineString], cell: float = 4.0):
+    """Close doorways by joining wall ends that a door was drawn between.
+
+    A doorway is a GAP in a wall line, so the room it serves never closes and
+    polygonize merges it with the corridor — 78 of ENNAKHIL's labels shared a
+    face for this reason. Where a door symbol exists its block geometry closes
+    the gap, but a cased opening or an arch has no symbol at all, and nothing in
+    the drawing can be snapped to bridge it.
+
+    What CAN be used is that a doorway interrupts one straight wall. So: take
+    every end that no other segment shares, and join two of them when they are a
+    door's width apart AND the line between them continues both walls. The
+    collinearity test at both ends is the safety: without it this would happily
+    join opposite sides of a room and invent a wall that was never there.
+    """
+    degree: dict[tuple, list] = defaultdict(list)
+    for line in lines:
+        for point, direction in _ends(line):
+            degree[point].append(direction)
+
+    loose = [(p, d[0]) for p, d in degree.items() if len(d) == 1]
+    grid: dict[tuple[int, int], list] = defaultdict(list)
+    for point, direction in loose:
+        grid[(int(point[0] // cell), int(point[1] // cell))].append((point, direction))
+
+    def neighbours(point):
+        cx, cy = int(point[0] // cell), int(point[1] // cell)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                yield from grid.get((cx + dx, cy + dy), ())
+
+    # STITCHING comes first, and it is the one that matters. Measured on
+    # ENNAKHIL: the nearest other loose end is 4 cm away at the median and
+    # within 15 cm for three quarters of them. That is not a doorway, it is the
+    # drawing being drawn by hand — ends that an architect reads as one corner
+    # and `polygonize` reads as two, so the face never closes. Snapping at 2 cm
+    # leaves them apart and snapping coarsely enough to merge them would
+    # collapse a 10 cm cloison onto itself, so they are stitched instead.
+    # No collinearity test: these ends are not continuing a wall, they ARE the
+    # same point drawn twice.
+    stitches, welded = [], set()
+    for point, _ in loose:
+        if point in welded:
+            continue
+        best, best_gap = None, None
+        for other, _ in neighbours(point):
+            if other == point or other in welded:
+                continue
+            gap = math.dist(point, other)
+            if gap <= STITCH and (best_gap is None or gap < best_gap):
+                best, best_gap = other, gap
+        if best is not None:
+            stitches.append(LineString([point, best]))
+            welded.add(point)
+            welded.add(best)
+
+    limit = math.cos(math.radians(COLLINEAR))
+    bridges, used = [], set(welded)
+    for point, direction in loose:
+        if point in used:
+            continue
+        best, best_gap = None, None
+        for other, other_dir in neighbours(point):
+            if other == point or other in used:
+                continue
+            vx, vy = other[0] - point[0], other[1] - point[1]
+            gap = (vx * vx + vy * vy) ** 0.5
+            if not OPENING[0] <= gap <= OPENING[1]:
+                continue
+            ux, uy = vx / gap, vy / gap
+            # Leaving this end along its outward direction, and arriving at the
+            # other against its outward direction.
+            if ux * direction[0] + uy * direction[1] < limit:
+                continue
+            if -ux * other_dir[0] - uy * other_dir[1] < limit:
+                continue
+            if best_gap is None or gap < best_gap:
+                best, best_gap = other, gap
+        if best is not None:
+            bridges.append(LineString([point, best]))
+            used.add(point)
+            used.add(best)
+    return stitches, bridges
+
+
 def labels_in(msp, keep) -> list[tuple[str, str, Point]]:
     """Room labels as (text, kind, point). Unclassifiable text is dropped."""
     found = []
@@ -238,6 +356,8 @@ def main() -> None:
     parser.add_argument("--snap", type=float, default=0.02,
                         help="metres; coordinates are rounded onto this grid "
                              "before noding, to close near-misses")
+    parser.add_argument("--no-bridge", action="store_true",
+                        help="do not infer openings — for comparison")
     parser.add_argument("--plans-only", action="store_true")
     parser.add_argument("--gap", type=float, default=15.0)
     args = parser.parse_args()
@@ -271,9 +391,16 @@ def main() -> None:
     for layer, n in used.most_common(6):
         print(f"    {layer[:40]:<40}{n:>7}")
 
+    _rule("OPENINGS")
+    stitches, bridges = ([], []) if args.no_bridge else bridge_openings(lines)
+    print(f"  stitched      {len(stitches)} ends under {STITCH} m apart"
+          f"  <- the same corner drawn twice")
+    print(f"  bridged       {len(bridges)} gaps {OPENING[0]}–{OPENING[1]} m wide,"
+          f" collinear within {COLLINEAR:.0f} deg  <- doorways")
+
     _rule("FACES")
     print("  noding and polygonizing —")
-    faces = [f for f in polygonize(unary_union(lines))
+    faces = [f for f in polygonize(unary_union(lines + stitches + bridges))
              if MIN_AREA <= f.area <= MAX_AREA]
     print(f"  faces         {len(faces)} between {MIN_AREA} and {MAX_AREA} m2")
     if not faces:

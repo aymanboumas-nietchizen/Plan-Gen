@@ -1128,3 +1128,35 @@ LIMIT:    A plan cannot be closed where the architect drew no door. Cased
 Next:     Either bridge openings by inference — a gap in a wall run shorter than
           a door width is a doorway — or accept the yield and gather enough
           plans that 9% is still a distribution.
+
+---
+
+## S21b — Inferring openings, and what the leaks turned out to be  2026-09-12
+
+Built:    Two passes over loose wall ends, not one. STITCHING welds ends under
+          0.25 m apart with no direction test — they are the same corner drawn
+          twice. BRIDGING joins ends 0.55-2.10 m apart that are collinear within
+          18 degrees at BOTH ends — that is a doorway continuing one wall, and
+          the two-ended test is what stops it inventing a wall across a room.
+Measured: 1035 stitches against 12 bridges. SLOPPINESS, NOT DOORWAYS, is the
+          dominant defect: on ENNAKHIL the nearest other loose end is 4 cm away
+          at the median and within 15 cm for three quarters of them, while only
+          268 of 23662 pairs in door-width range were collinear at all. The
+          earlier assumption that doorways were the problem was wrong, and the
+          diagnostic that found it took one pass over the endpoint distances.
+Result:   Measured 25 -> 27. SDB went 2 rooms -> 4 at a plausible 1.76 median.
+          The 78 shared faces did not move at all.
+FOUND:    AND THEY ARE NOT ALL FAILURES. The largest are
+            91.1 m2  Salon Europeen + Salon Marocain + Sejour
+            89.2 m2  Cuisine + Salon Marocain
+          which is the typology the architect described: a Moroccan reception is
+          ONE OPEN VOLUME holding salon marocain, salon europeen and sejour
+          together. The geometry is right and the assumption that one label
+          means one enclosure is what is wrong. `Salon Europeen` is also a label
+          this corpus had not shown before.
+          The real leaks are the rest: `Chambre + SDB` pairs, which are en-suites
+          leaking through their door, and an `SDB + WC` sharing 77.6 m2.
+Next:     A face holding several labels of the same kind is one room with
+          several names, not a failure. Counting it as such is worth more than
+          any further geometric repair — and it is a finding for planfgen-regs
+          about what the engine must be able to express.
