@@ -1280,3 +1280,17 @@ Tests:    325 passed, 1 failed — the failure predates this and fails at its ow
           `test_moving_the_building_earns_its_keep`, 0.8692 moving vs 0.8772 still, every PYTHONHASHSEED.
 Open:     ART. 7 `MIN_GLAZING` (1 m²) and `MIN_WINDOW_DIMENSION` (0.35 m) are defined in
           regulation.py and read by nothing; `size_windows` can go below both.
+
+---
+
+## S23 — The studio on real programmes (no engine code)            2026-09-27
+
+Built:    `tools/probe_programmes.py` — F2/F3/F4 at agency sizes, through the studio's own pipeline.
+Found:    Studio as shipped: 0 plans on every real programme, every profile — `area` refuses all.
+          It never calls `fit_brief`; the band is a fixed width, so it cannot absorb slack (seed.py
+          says it does). Same briefs through `fit_brief`: areas exact, `furniture` is what's left.
+          Minus the WC line and the ENTREE line: F3 4/4 and F4 3-4/4 on all three profiles.
+Causes:   a 2 m2 WC as a full-depth slot is 0.8 m wide; ENTREE is circulation, so it names the band
+          and COULOIR vanishes; an F2 corridor spine eats 17 % and leaves Ch1 2.46 m wide; a seed
+          that fails its gates is never accepted (500 proposed, 0 accepted) — a blind walk.
+UX:       any rerun (a DXF download included) discards the plan; the result opens on the L1 graph.
