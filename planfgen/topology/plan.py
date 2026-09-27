@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from planfgen.brief.programme import Orientation, Programme, RoomType
+from planfgen.brief.programme import Programme
 from planfgen.topology.gradient import Zone, access_gradient
 from planfgen.topology.relations import ProgrammeGraph
 from planfgen.topology.zoning import day_night

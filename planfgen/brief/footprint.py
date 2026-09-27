@@ -149,23 +149,6 @@ class Footprint:
         minx, miny, maxx, maxy = parcel.outline.bounds
         return cls(minx, miny, maxx - minx, maxy - miny)
 
-    def against(self, parcel: Parcel, edge: int) -> Footprint:
-        """The same footprint, pushed flush against one edge of the parcel.
-
-        Kept because it says one thing plainly, and S14 needed exactly that. The
-        rule a brief is actually placed by is `place_footprint`, which honours
-        party walls and setbacks as well as the entry.
-        """
-        lox, loy, hix, hiy = parcel.buildable_bounds()
-        side = parcel.side_of(edge)
-        if side == "left":
-            return replace(self, x=lox)
-        if side == "right":
-            return replace(self, x=hix - self.w)
-        if side == "bottom":
-            return replace(self, y=loy)
-        return replace(self, y=hiy - self.h)
-
     def buildable(self, parcel: Parcel, tol: float = WITHIN_TOL) -> bool:
         """True if the footprint is inside the parcel *and* clear of its
         setbacks. `within` is the weaker test and asks only about the boundary.

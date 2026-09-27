@@ -1266,3 +1266,17 @@ Status:   FURNITURE stays, unproven: 0 matches on both files, no regression on
 Next:     Ask for NOUR's ArchiCAD original with Zones. Meanwhile ENNAKHIL is the
           calibrated file and a second of its quality is worth more than a
           fourth attempt at this one.
+
+---
+
+## S22 — Cleanup: dead code, stale paths, one misleading doc      2026-09-27
+
+Removed:  13 unused imports; `cell_polygon`, `Footprint.against`, `ARC_SEGMENTS` (no callers
+          anywhere); two dead locals. No behaviour change.
+Moved:    `PLANFGEN_project_brief_2.md` → `legacy/`. It is the v1 brief and prescribes the opposite.
+Docs:     CLAUDE.md no longer lists `planfgen.main` (it never existed); adds `pip install -e`.
+          pytest moved from runtime deps to the `dev` extra.
+Tests:    325 passed, 1 failed — the failure predates this and fails at its own commit on Linux:
+          `test_moving_the_building_earns_its_keep`, 0.8692 moving vs 0.8772 still, every PYTHONHASHSEED.
+Open:     ART. 7 `MIN_GLAZING` (1 m²) and `MIN_WINDOW_DIMENSION` (0.35 m) are defined in
+          regulation.py and read by nothing; `size_windows` can go below both.

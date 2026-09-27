@@ -57,11 +57,15 @@ coefficient, envelope compactness, daylight.
 ## Commands
 
 ```bash
+pip install -e ".[studio,dev]"                # once; tools/ need the package
 python -m pytest planfgen/tests/ -q          # all tests
 python -m pytest planfgen/tests/test_X.py -q # one module (prefer this)
-python -m planfgen.main --brief <json>       # CLI  (note: -m, not a file path)
+python tools/probe_ceiling.py               # room-count ceiling, all profiles
 streamlit run planfgen/studio/app.py --server.headless true
 ```
+
+There is no CLI yet: `planfgen.main` does not exist. The studio and the
+Grasshopper component are the two ways in.
 
 ## Working agreement — read this before doing anything
 

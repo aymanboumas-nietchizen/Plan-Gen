@@ -39,7 +39,6 @@ from planfgen.services import (
     shaft_stack_id,
     stable,
     stack_conflicts,
-    wall_stack_id,
     wet_clusters,
     wet_report,
 )

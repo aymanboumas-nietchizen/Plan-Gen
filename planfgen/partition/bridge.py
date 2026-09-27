@@ -14,7 +14,6 @@ thinner wall than its neighbour believes is there.
 
 from __future__ import annotations
 
-from shapely.geometry import Polygon
 
 from planfgen.brief.regulation import RegulationProfile
 from planfgen.fabric.axis import WallAxis, WallKind
@@ -130,15 +129,3 @@ def _cell_at(cells, x: float, y: float):
         if cell.x <= x <= cell.x + cell.w and cell.y <= y <= cell.y + cell.h:
             return cell
     return None
-
-
-def cell_polygon(cell) -> Polygon:
-    """The cell's axis rectangle, for comparison against the face it produced."""
-    return Polygon(
-        [
-            (cell.x, cell.y),
-            (cell.x + cell.w, cell.y),
-            (cell.x + cell.w, cell.y + cell.h),
-            (cell.x, cell.y + cell.h),
-        ]
-    )

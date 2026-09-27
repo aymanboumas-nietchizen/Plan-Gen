@@ -15,7 +15,6 @@ circulation room costs, are on the page before the button is pressed.
 
 from __future__ import annotations
 
-import io
 import json
 
 import streamlit as st
@@ -35,9 +34,8 @@ from planfgen.brief import (
 )
 from planfgen.document import export_dxf, to_gh_json, to_svg
 from planfgen.document.dimensions import exterior_chains, interior_chains
-from planfgen.evaluate import all_gates
 from planfgen.openings import place_openings
-from planfgen.search import RunStats, anneal, envelope_of, evaluate, grid_for
+from planfgen.search import RunStats, anneal, grid_for
 from planfgen.services import assign_stack_ids, assign_wet_walls, place_shafts
 from planfgen.services.stacking import Level
 from planfgen.studio.render import partition_svg, topology_svg

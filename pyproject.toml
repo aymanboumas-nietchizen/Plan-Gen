@@ -12,7 +12,6 @@ dependencies = [
     "networkx>=3.0",
     "matplotlib>=3.7",
     "ezdxf>=1.1",
-    "pytest>=7.4",
 ]
 
 [project.optional-dependencies]
@@ -20,6 +19,7 @@ dependencies = [
 # without ifcopenshell, and the studio is a viewer.
 ifc = ["ifcopenshell>=0.8"]
 studio = ["streamlit>=1.30"]
+dev = ["pytest>=7.4"]
 
 [tool.setuptools.packages.find]
 include = ["planfgen*"]

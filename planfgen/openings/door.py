@@ -67,7 +67,7 @@ class Door:
         overlap on the same side.
         """
         low, high = self.span
-        (x0, y0), (x1, y1) = self.wall.p0, self.wall.p1
+        x0, y0 = self.wall.p0
         depth = self.leaf * (1 if self.swing_side >= 0 else -1)
         if self.wall.is_horizontal:
             near, far = sorted((y0, y0 + depth))

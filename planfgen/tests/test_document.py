@@ -26,7 +26,6 @@ from planfgen.document import (
 from planfgen.fabric import WallKind
 from planfgen.openings import place_openings
 from planfgen.services import place_shafts
-from planfgen.topology import ProgrammeGraph, Relation, RelationType as R
 
 from planfgen.tests.test_openings import FLAT_RELATIONS, topology_for
 from planfgen.tests.test_services import P, flat

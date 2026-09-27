@@ -26,7 +26,6 @@ import random
 from dataclasses import replace
 
 from planfgen.brief.footprint import (
-    Footprint,
     fit_footprint,
     place_footprint,
 )

@@ -11,7 +11,6 @@ per wall kind so a consultant can turn the partitions off and see the structure.
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
 import ezdxf
@@ -50,9 +49,6 @@ WALL_LAYER: dict[WallKind, str] = {
 
 #: Height of the room-stamp text, in metres.
 STAMP_HEIGHT = 0.22
-
-#: Points on a door's swing arc.
-ARC_SEGMENTS = 16
 
 
 def _setup(doc) -> None:
@@ -109,7 +105,7 @@ def _draw_solid(msp, points, layer: str, colour: int) -> None:
 
 
 def _draw_walls(msp, fabric: FabricPlan, openings) -> None:
-    for wall, solid in wall_solids(fabric.graph, fabric.profile):
+    for wall, _ in wall_solids(fabric.graph, fabric.profile):
         layer, colour, _ = LAYERS[WALL_LAYER[wall.kind]]
         half = fabric.profile.thickness_of(wall.kind.value) / 2
         gaps = _openings_on(wall, openings)

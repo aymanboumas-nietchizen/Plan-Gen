@@ -29,3 +29,4 @@ references/raw/*
 # The agency drop as it landed, until it is moved into references/raw/.
 # Images are client work too — a plan de situation names the site.
 /RESIDENCE ENNAKHIL/
+*.egg-info/

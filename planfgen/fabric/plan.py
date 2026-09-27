@@ -18,7 +18,7 @@ from shapely.geometry import Polygon
 from planfgen.brief.parcel import Parcel
 from planfgen.brief.programme import RoomType
 from planfgen.brief.regulation import RegulationProfile
-from planfgen.fabric.axis import TOL, WallAxis, segment_overlap
+from planfgen.fabric.axis import TOL, WallAxis
 from planfgen.fabric.graph import BOUND_TOL, WallGraph
 
 
