@@ -2,26 +2,30 @@
 
     streamlit run planfgen/studio/app.py --server.headless true
 
-The stage selector is the argument of the whole rewrite made visible. L1 is a
-graph with no geometry in it; L3 is a plan built from walls. v1 shipped only the
-first and called it the second. Here they sit behind adjacent tabs, drawn from
-the same run, and are obviously different things.
+The page opens on the plan, because the plan is what an architect came for.
+The organigramme is still here, last, drawn deliberately as a graph with no
+geometry in it — L1 and L3 side by side are the argument of the rewrite — but
+it is no longer the first thing a result shows.
 
 The feasibility budget is shown *before* anything is generated, because a brief
-that cannot be built is not a generation problem. `seed.spine_note` holds that
-line for the *tree*: what the spine will be, and what a programme with no
-circulation room costs, are on the page before the button is pressed.
+that cannot be built is not a generation problem. Generation itself lives in
+`pipeline.py`: the footprint is solved there, so the lot only has to be large
+enough for the programme, not calibrated to it.
+
+A result is kept in `st.session_state`. Streamlit reruns this script on every
+interaction, and the plan used to exist only for the one run in which the
+button read True — downloading the DXF discarded it.
 """
 
 from __future__ import annotations
 
 import json
+import math
 
 import streamlit as st
 from shapely.geometry import Polygon
 
 from planfgen.brief import (
-    MA_PROFILE,
     Brief,
     EdgeSpec,
     EdgeType,
@@ -34,63 +38,64 @@ from planfgen.brief import (
 )
 from planfgen.document import export_dxf, to_gh_json, to_svg
 from planfgen.document.dimensions import exterior_chains, interior_chains
-from planfgen.openings import place_openings
-from planfgen.search import RunStats, anneal, grid_for
-from planfgen.services import assign_stack_ids, assign_wet_walls, place_shafts
-from planfgen.services.stacking import Level
+from planfgen.studio.pipeline import PROFILE_CHOICES, generate
+from planfgen.studio.presets import PRESETS
 from planfgen.studio.render import partition_svg, topology_svg
-from planfgen.studio.seed import seed_tree, spine_note
+from planfgen.studio.seed import spine_note
 from planfgen.topology import ProgrammeGraph, Relation, RelationType
 
 st.set_page_config(page_title="PLANFGEN v2", layout="wide")
 
-DEFAULT_ROOMS = [
-    ("Sejour", "SEJOUR", 33.8, "S"),
-    ("Cuisine", "CUISINE", 13.5, "N"),
-    ("Ch1", "CHAMBRE_PRINCIPALE", 19.2, "N"),
-    ("Ch2", "CHAMBRE", 15.8, "S"),
-    ("SDB", "SDB", 10.2, "E"),
-    ("Couloir", "COULOIR", 8.0, ""),
-]
-
-DEFAULT_RELATIONS = [
-    ("Couloir", "Sejour", "CONNECTED", 2.0),
-    ("Couloir", "Ch1", "CONNECTED", 2.0),
-    ("Couloir", "Ch2", "CONNECTED", 2.0),
-    ("Couloir", "SDB", "CONNECTED", 1.0),
-    ("Sejour", "Cuisine", "CONNECTED", 1.5),
-    ("Cuisine", "SDB", "ADJACENT", 2.0),
-    ("SDB", "Sejour", "SEPARATED", 1.0),
-]
-
 EDGE_NAMES = [k.name for k in EdgeType]
+
+#: Edge i of the rectangle, as it appears on the drawing. Not a compass
+#: direction: that depends on the north slider.
+EDGE_SIDES = ["bas", "droite", "haut", "gauche"]
+EDGE_DEFAULTS = ["STREET", "MITOYEN", "COURT", "MITOYEN"]
 
 
 # --- the brief --------------------------------------------------------------
 
 
 def sidebar():
+    st.sidebar.header("Typologie")
+    preset_key = st.sidebar.selectbox(
+        "Point de depart",
+        list(PRESETS),
+        format_func=lambda key: PRESETS[key].label,
+    )
+    preset = PRESETS[preset_key]
+    profile_label = st.sidebar.selectbox("Reglementation", list(PROFILE_CHOICES))
+
     st.sidebar.header("Parcelle")
-    width = st.sidebar.number_input("Largeur (m)", 6.0, 40.0, 12.0, 0.1)
-    height = st.sidebar.number_input("Profondeur (m)", 6.0, 40.0, 10.0, 0.1)
+    # Keyed on the preset so that choosing a typology also resets the lot.
+    width = st.sidebar.number_input(
+        "Largeur (m)", 6.0, 40.0, preset.width, 0.1, key=f"w_{preset_key}"
+    )
+    height = st.sidebar.number_input(
+        "Profondeur (m)", 6.0, 40.0, preset.depth, 0.1, key=f"h_{preset_key}"
+    )
     north = st.sidebar.slider("Nord (degres)", 0, 359, 0)
     edges = [
-        st.sidebar.selectbox(f"Bord {i} ({side})", EDGE_NAMES, index=default)
-        for i, (side, default) in enumerate(
-            [("sud", 0), ("est", 3), ("nord", 1), ("ouest", 3)]
+        st.sidebar.selectbox(
+            f"Bord {i} ({side})", EDGE_NAMES, index=EDGE_NAMES.index(default)
         )
+        for i, (side, default) in enumerate(zip(EDGE_SIDES, EDGE_DEFAULTS))
     ]
-    entry = st.sidebar.number_input("Bord d'entree", 0, 3, 0)
+    entry = st.sidebar.selectbox(
+        "Entree par le bord",
+        range(4),
+        format_func=lambda i: f"{i} ({EDGE_SIDES[i]}, {edges[i]})",
+    )
 
     st.sidebar.header("Recherche")
     seed = st.sidebar.number_input("Graine", 0, 9999, 3)
     iterations = st.sidebar.slider("Iterations", 0, 1000, 200, 20)
-    return width, height, north, edges, entry, seed, iterations
+    return (preset_key, profile_label, width, height, north, edges, entry,
+            seed, iterations)
 
 
-def build_brief(width, height, north, edges, entry, rooms):
-    import math
-
+def build_brief(width, height, north, edges, entry, rooms, profile):
     programme = Programme(
         [
             RoomSpec(
@@ -109,8 +114,8 @@ def build_brief(width, height, north, edges, entry, rooms):
         north=math.radians(north),
         entry_edge=int(entry),
     )
-    budget = check_feasibility(programme, parcel, MA_PROFILE)
-    return Brief(programme, parcel, MA_PROFILE, budget), budget
+    budget = check_feasibility(programme, parcel, profile)
+    return Brief(programme, parcel, profile, budget), budget
 
 
 def build_graph(relations) -> ProgrammeGraph:
@@ -128,29 +133,32 @@ def build_graph(relations) -> ProgrammeGraph:
 st.title("PLANFGEN v2")
 st.caption("Les murs sont dessines. Les pieces en decoulent.")
 
-width, height, north, edges, entry, seed, iterations = sidebar()
+(preset_key, profile_label, width, height, north, edges, entry,
+ seed, iterations) = sidebar()
+preset = PRESETS[preset_key]
+profile = PROFILE_CHOICES[profile_label]
 
 st.subheader("Programme")
 rooms = st.data_editor(
     [
         {"nom": n, "kind": k, "surface_utile": a, "orientation": o}
-        for n, k, a, o in DEFAULT_ROOMS
+        for n, k, a, o in preset.rooms
     ],
     num_rows="dynamic",
     use_container_width=True,
-    key="rooms",
+    key=f"rooms_{preset_key}",
 )
 
 with st.expander("Relations (L1)"):
     relations = st.data_editor(
-        [{"a": a, "b": b, "kind": k, "weight": w} for a, b, k, w in DEFAULT_RELATIONS],
+        [{"a": a, "b": b, "kind": k, "weight": w} for a, b, k, w in preset.relations],
         num_rows="dynamic",
         use_container_width=True,
-        key="relations",
+        key=f"relations_{preset_key}",
     )
 
 try:
-    brief, budget = build_brief(width, height, north, edges, entry, rooms)
+    brief, budget = build_brief(width, height, north, edges, entry, rooms, profile)
     graph = build_graph(relations)
 except Exception as exc:  # a half-edited table is not an error worth a traceback
     st.warning(f"Brief incomplet : {exc}")
@@ -170,60 +178,72 @@ note = spine_note(brief.programme, budget)
 if not note.ok:
     st.error(note.message)
     st.stop()
-if note.kind == "band":
+if note.banded:
     st.caption(note.message)
-elif note.kind == "tight":
-    st.warning(note.message)
 else:
     st.info(note.message)
 
-if not st.button("Generer", type="primary"):
+# Everything the result depends on. A result generated from other inputs is
+# still shown, but marked as stale rather than silently passed off as current.
+fingerprint = json.dumps(
+    [preset_key, profile_label, width, height, north, edges, entry, seed,
+     iterations, rooms, relations],
+    sort_keys=True,
+    default=str,
+)
+
+if st.button("Generer", type="primary"):
+    with st.spinner("Recherche en cours..."):
+        st.session_state["run"] = (
+            fingerprint,
+            generate(brief, graph, int(seed), int(iterations)),
+        )
+
+if "run" not in st.session_state:
     st.info("Le graphe L1 ci-dessous existe deja. Le plan, non.")
     st.image(topology_svg(graph, brief.programme))
     st.stop()
 
-stats = RunStats()
-tree = seed_tree(brief.programme)
-best = anneal(brief, tree, int(iterations), seed=int(seed), graph=graph, stats=stats)
-if not best:
-    st.error(f"Aucun candidat n'a passe les portes. {stats.explain()}")
+made_from, run = st.session_state["run"]
+if made_from != fingerprint:
+    st.warning(
+        "Le brief a change depuis cette generation. Le plan affiche est "
+        "l'ancien : cliquez sur Generer pour le mettre a jour."
+    )
+
+if run.fitting.shrunk:
+    st.warning(run.fitting.note)
+else:
+    st.caption(run.fitting.note)
+
+if not run.ok:
+    st.error(f"Aucun candidat n'a passe les portes. {run.stats.explain()}")
     st.stop()
 
-result = best[0]
+result = run.result
 plan = result.plan
-fabric = plan.to_fabric(MA_PROFILE)
-shafts = place_shafts(fabric, MA_PROFILE)
-assign_wet_walls(fabric, shafts)
-assign_stack_ids(Level(0, 2.80, fabric, shafts), grid_for(brief))
-openings = place_openings(fabric, type("T", (), {"graph": graph})(), MA_PROFILE)
+fabric = run.fabric
+used = result.brief
+footprint = used.footprint
 
-columns = st.columns(5)
+columns = st.columns(6)
 for column, (label, value) in zip(
     columns,
     [
         ("Global", f"{result.scores.globale:.3f}"),
         ("Adjacences", f"{result.scores.adjacences:.3f}"),
         ("Orientation", f"{result.scores.orientation:.3f}"),
-        ("Circulation", f"{plan.circulation_coefficient(MA_PROFILE) * 100:.1f} %"),
-        ("Erreur surface", f"{plan.max_area_error(MA_PROFILE) * 100:.3f} %"),
+        ("Circulation", f"{plan.circulation_coefficient(used.profile) * 100:.1f} %"),
+        ("Erreur surface", f"{plan.max_area_error(used.profile) * 100:.3f} %"),
+        ("Emprise", f"{footprint.w:.1f} x {footprint.h:.1f}"),
     ],
 ):
     column.metric(label, value)
-st.caption(stats.explain())
+st.caption(run.stats.explain())
 
-l1, l2, l3, l8 = st.tabs(
-    ["L1 Topologie", "L2 Partition", "L3 Fabrique", "L8 Dessin"]
+l3, l8, l2, l1 = st.tabs(
+    ["L3 Plan", "L8 Dessin", "L2 Partition", "L1 Topologie"]
 )
-
-with l1:
-    st.markdown(
-        "Un graphe. Aucune geometrie. **C'est ce que v1 livrait en l'appelant un plan.**"
-    )
-    st.image(topology_svg(graph, brief.programme))
-
-with l2:
-    st.markdown("Des rectangles sur les axes : surface nette / cible.")
-    st.image(partition_svg(plan, MA_PROFILE))
 
 with l3:
     st.markdown("Les murs sont solides, les surfaces sont mesurees.")
@@ -233,7 +253,7 @@ with l3:
             {
                 "nom": nom,
                 "surface_utile": round(space.surface_utile, 2),
-                "cible": round(brief.programme.by_nom(nom).surface_utile, 2),
+                "cible": round(used.programme.by_nom(nom).surface_utile, 2),
                 "net": "%.2f x %.2f" % space.net_dims(),
             }
             for nom, space in fabric.spaces.items()
@@ -242,6 +262,7 @@ with l3:
     )
 
 with l8:
+    openings = run.openings
     st.markdown(f"{openings.explain()}")
     if openings.errors:
         for error in openings.errors:
@@ -249,12 +270,24 @@ with l8:
     chains = exterior_chains(fabric) + interior_chains(fabric)
     st.caption(f"{len(chains)} chaines de cotation")
 
-    export_dxf(fabric, "outputs/studio.dxf", openings=openings, shafts=shafts)
+    export_dxf(fabric, "outputs/studio.dxf", openings=openings, shafts=list(run.shafts))
     with open("outputs/studio.dxf", "rb") as handle:
         st.download_button("plan.dxf", handle.read(), "plan.dxf")
     st.download_button(
         "plan.json (Grasshopper)",
-        json.dumps(to_gh_json(fabric, openings, shafts), indent=2, ensure_ascii=False),
+        json.dumps(
+            to_gh_json(fabric, openings, list(run.shafts)), indent=2, ensure_ascii=False
+        ),
         "plan.json",
         mime="application/json",
     )
+
+with l2:
+    st.markdown("Des rectangles sur les axes : surface nette / cible.")
+    st.image(partition_svg(plan, used.profile))
+
+with l1:
+    st.markdown(
+        "Un graphe. Aucune geometrie. **C'est ce que v1 livrait en l'appelant un plan.**"
+    )
+    st.image(topology_svg(graph, used.programme))

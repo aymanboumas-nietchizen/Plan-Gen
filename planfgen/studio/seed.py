@@ -15,26 +15,13 @@ corridor; its rooms open into one another. The engine builds one: on the studio'
 own default programme, corridorless and sized to fill its envelope, 4 of 4 seeds
 found a plan (measured 2026-08-28).
 
-WHAT DOES HAVE TO BE SAID BEFORE GENERATING is the consequence, because the
-studio's standard is that a brief which cannot be built is explained before
-anything is run. A band's area is an *output* — it absorbs whatever the envelope
-has left over. With no band, the rooms absorb it instead: every one of them
-overshoots its target by the same fraction, and `AREA_TOLERANCE` refuses the lot.
-Measured 2026-08-28 on the studio's own sidebar defaults — 12 x 10 m, edges
-STREET / MITOYEN / COURT / MITOYEN, four seeds, 200 iterations, the default
-programme scaled:
-
-    programme    slack over required    plans found
-      92.5 m2         12.6 %             0 of 4    <- the default, corridor deleted
-      98.0 m2          6.3 %             0 of 4
-     100.0 m2          4.2 %             4 of 4
-     101.8 m2          2.3 %             4 of 4
-     104.1 m2          0.0 %             4 of 4
-
-The 5 % gate falls inside that gap, so the slack the budget already knows is a
-usable prediction — but `AreaBudget.habitable` is a deliberately optimistic
-estimate (see `brief/feasibility.py`), so it is a warning here and never a
-refusal. The gate stays the engine's to enforce.
+WHAT HAD TO BE SAID BEFORE GENERATING, UNTIL 2026-09-27: that with no band the
+rooms absorbed the parcel's slack, overshot together, and met the 5 % area gate.
+That was true only because the studio built on the whole parcel. It now solves
+the footprint first (`pipeline.fit`), so the building is sized to what the
+leaves ask for and the slack stays unbuilt, band or no band. The `tight` note
+went with it; so did the band note's claim that the corridor absorbs the margin
+— a band has a fixed width, so it never could.
 
 The one thing this module does refuse is a programme with fewer than two rooms
 beside the circulation: one room is not a partition, it is the envelope, and no
@@ -46,7 +33,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from planfgen.brief import AreaBudget, Programme
-from planfgen.evaluate import AREA_TOLERANCE
 from planfgen.partition import BandCut, Cut, Direction, Leaf, SlicingTree
 
 #: The fewest rooms beside the circulation that can be cut into a plan.
@@ -60,8 +46,7 @@ class SpineNote:
     `kind` is one of:
 
     - ``"band"``   — a circulation room names the spine; the normal case.
-    - ``"open"``   — no circulation room, and the programme fills its envelope.
-    - ``"tight"``  — no circulation room, and nothing absorbs the parcel's slack.
+    - ``"open"``   — no circulation room: rooms open into one another.
     - ``"refused"``— too few rooms to cut; nothing is generated.
     """
 
@@ -95,27 +80,15 @@ def spine_note(programme: Programme, budget: AreaBudget) -> SpineNote:
         return SpineNote(
             "band",
             f"Spine : bande de circulation nommee par {noms}. Sa largeur est une "
-            f"donnee, sa surface un resultat : c'est elle qui absorbe la marge.",
+            f"donnee, sa surface un resultat. L'emprise est calculee pour le "
+            f"programme ; le reste de la parcelle n'est pas bati.",
         )
 
-    slack = -budget.deficit
-    overshoot = slack / budget.required if budget.required > 0 else 0.0
-    head = (
+    return SpineNote(
+        "open",
         "Aucune piece de circulation : le plan sera coupe sans couloir, les "
         "pieces ouvrant les unes sur les autres. C'est un plan reel (un F1 ou "
-        "un F2 en a rarement un), mais aucune bande n'absorbe alors la marge : "
-        f"les {slack:.2f} m2 se repartissent sur les pieces, soit environ "
-        f"{overshoot:.1%} d'ecart de surface."
-    )
-    if overshoot > AREA_TOLERANCE:
-        return SpineNote(
-            "tight",
-            f"{head} La porte 'surface' refuse au-dela de {AREA_TOLERANCE:.0%} : "
-            f"montez les surfaces d'environ {overshoot:.0%}, ou ajoutez une "
-            f"ligne de circulation (COULOIR).",
-        )
-    return SpineNote(
-        "open", f"{head} C'est sous la tolerance de {AREA_TOLERANCE:.0%}."
+        "un F2 en a rarement un).",
     )
 
 

@@ -19,7 +19,7 @@ from planfgen.tests.test_search import (
 )
 from planfgen.search import envelope_of, grid_for
 from planfgen.brief import MA_PROFILE as P
-from planfgen.topology import ProgrammeGraph
+from planfgen.topology import ProgrammeGraph, Relation, RelationType
 
 
 def test_the_organigramme_is_a_graph_and_nothing_else():
@@ -107,14 +107,39 @@ def test_the_app_runs_and_shows_the_budget_before_generating():
     assert not app.tabs, "nothing is generated until it is asked for"
 
 
-def test_generating_produces_the_four_stages():
-    """THE stage selector: one run, shown at L1, L2, L3 and L8."""
+def test_generating_produces_the_four_stages_plan_first():
+    """THE stage selector: one run, shown at L3, L8, L2 and L1. The plan is
+    what an architect came for, so a result opens on it — it used to open on
+    the organigramme, which the page itself calls what v1 shipped."""
     app = run_app()
     app.button[0].click().run()
 
     assert not app.exception, app.exception
     labels = [tab.label for tab in app.tabs]
-    assert labels == ["L1 Topologie", "L2 Partition", "L3 Fabrique", "L8 Dessin"]
+    assert labels == ["L3 Plan", "L8 Dessin", "L2 Partition", "L1 Topologie"]
+
+
+def test_the_result_survives_a_rerun():
+    """Streamlit reruns the script on every interaction, and the button reads
+    True for one run only. The plan used to vanish on the next one — a DXF
+    download was enough to discard it."""
+    app = run_app()
+    app.button[0].click().run()
+    app.run()
+
+    assert not app.exception, app.exception
+    assert app.tabs, "the plan is still on the page after a rerun"
+    assert not any("a change" in w.value for w in app.warning), "nothing is stale"
+
+
+def test_a_changed_brief_marks_the_result_stale():
+    app = run_app()
+    app.button[0].click().run()
+    app.slider[0].set_value(90).run()   # north
+
+    assert not app.exception, app.exception
+    assert app.tabs, "the old plan is kept"
+    assert any("a change" in w.value for w in app.warning), "and said to be old"
 
 
 def test_the_run_reports_real_metrics():
@@ -129,6 +154,7 @@ def test_the_run_reports_real_metrics():
         "Orientation",
         "Circulation",
         "Erreur surface",
+        "Emprise",
     }
     assert 0.0 < float(metrics["Global"]) <= 1.0
     assert float(metrics["Erreur surface"].rstrip(" %")) < 5.0
@@ -271,15 +297,17 @@ def test_the_corridorless_plan_is_one_the_engine_actually_builds():
     assert plan.max_area_error(P) <= AREA_TOLERANCE
 
 
-def test_the_corridorless_note_carries_the_slack_nothing_absorbs():
-    """The band absorbs the envelope's slack. With no band the rooms do, and
-    the studio says so, with the number, before the button."""
-    brief, budget = studio_brief(STUDIO_ROOMS[:5])  # areas calibrated for a band
-    note = spine_note(brief.programme, budget)
+def test_the_uncalibrated_corridorless_programme_now_generates():
+    """The default programme with its corridor deleted used to be refused by
+    the area gate: 12.6 % of slack spread over the rooms, and nothing to absorb
+    it. The studio now sizes the footprint first, so the slack stays unbuilt."""
+    brief, budget = studio_brief(STUDIO_ROOMS[:5])
+    assert spine_note(brief.programme, budget).kind == "open"
 
-    assert note.kind == "tight" and note.ok, "generated anyway; the gate is the engine's"
-    assert f"{-budget.deficit:.2f} m2" in note.message
-    assert "12.6%" in note.message and "COULOIR" in note.message
+    run = generate(brief, ProgrammeGraph([]), seed=1, iterations=200)
+
+    assert run.ok, run.stats.explain()
+    assert run.result.plan.max_area_error(P) <= AREA_TOLERANCE
 
 
 def test_too_few_rooms_is_refused_on_the_page_not_as_a_traceback():
@@ -302,3 +330,78 @@ def test_the_page_says_what_the_spine_will_be_before_the_button():
     assert not app.exception, app.exception
     assert any("bande de circulation" in caption.value for caption in app.caption)
     assert not app.error
+
+
+# --- the pipeline, and what the studio offers to start from ------------------
+
+from planfgen.brief.regulation import PROFILES  # noqa: E402
+from planfgen.studio.pipeline import fit, generate  # noqa: E402
+from planfgen.studio.presets import PRESETS  # noqa: E402
+
+
+def preset_brief(key: str, profile):
+    preset = PRESETS[key]
+    brief, budget = studio_brief(
+        [(n, k, a, o) for n, k, a, o in preset.rooms], preset.width, preset.depth
+    )
+    brief = Brief(brief.programme, brief.parcel, profile,
+                  check_feasibility(brief.programme, brief.parcel, profile))
+    graph = ProgrammeGraph(
+        [Relation(a, b, RelationType[k], w) for a, b, k, w in preset.relations]
+    )
+    return brief, graph
+
+
+@pytest.mark.parametrize("profile_name", sorted(PROFILES))
+@pytest.mark.parametrize("key", sorted(PRESETS))
+def test_every_preset_generates_on_every_profile(key, profile_name):
+    """A preset that generates nothing is worse than no preset. Four seeds,
+    because one is a coin toss (F4 on the decret: 3 of 4, 2026-09-27)."""
+    brief, graph = preset_brief(key, PROFILES[profile_name])
+    assert brief.budget.ok, brief.budget.explain()
+
+    runs = [generate(brief, graph, seed=s, iterations=200) for s in range(1, 5)]
+
+    assert any(run.ok for run in runs), runs[-1].stats.explain()
+
+
+def test_the_studio_used_to_refuse_a_real_programme():
+    """The regression anchor. The F3 preset on its lot, built on the whole
+    parcel as the studio did until 2026-09-27: the band cannot absorb the slack,
+    every room overshoots together, and the area gate refuses every candidate."""
+    brief, graph = preset_brief("F3", P)
+    stats = RunStats()
+    tree = studio_seed_tree(brief.programme)
+
+    assert anneal(brief, tree, 200, seed=1, graph=graph, stats=stats) == []
+    assert stats.rejected_by == {"area": 200}, stats.explain()
+    assert generate(brief, graph, seed=1, iterations=200).ok
+
+
+def test_a_lot_too_small_scales_the_rooms_and_says_so():
+    """`fit_brief`'s other outcome: the whole lot, and every room smaller."""
+    brief, _ = preset_brief("F3", P)
+    small = Brief(
+        brief.programme,
+        Parcel(
+            outline=Polygon([(0, 0), (7, 0), (7, 8), (0, 8)]),
+            edges=brief.parcel.edges,
+            north=0.0,
+            entry_edge=0,
+        ),
+        P,
+        brief.budget,
+    )
+    fitting = fit(small, studio_seed_tree(small.programme))
+
+    assert fitting.shrunk
+    assert "reduite" in fitting.note
+
+
+def test_a_fitted_footprint_leaves_the_rest_of_the_lot_unbuilt():
+    brief, _ = preset_brief("F4", P)
+    fitting = fit(brief, studio_seed_tree(brief.programme))
+
+    assert not fitting.shrunk
+    assert fitting.footprint.w * fitting.footprint.h < brief.parcel.outline.area
+    assert "n'est pas bati" in fitting.note

@@ -1294,3 +1294,17 @@ Causes:   a 2 m2 WC as a full-depth slot is 0.8 m wide; ENTREE is circulation, s
           and COULOIR vanishes; an F2 corridor spine eats 17 % and leaves Ch1 2.46 m wide; a seed
           that fails its gates is never accepted (500 proposed, 0 accepted) — a blind walk.
 UX:       any rerun (a DXF download included) discards the plan; the result opens on the L1 graph.
+
+---
+
+## S24 — Studio step 1: fit the footprint, keep the result, plan first  2026-09-27
+
+Built:    `studio/pipeline.py` (`fit` + `generate`: fit_brief, search, services, openings) and
+          `studio/presets.py` (F3, F4, demo). app.py: typology + regulation selectors, result kept in
+          session_state and marked stale when the brief changes, tabs open on L3, Emprise metric.
+Tests:    test_studio 29 pass; every preset generates on every profile; F3 as the studio used to
+          run it is refused 200/200 by `area`, through `generate` it passes. Full suite 339 pass,
+          1 known failure (earns_its_keep). Browser: F4 Casablanca in 1.7 s, survives a DXF download.
+Changed:  `spine_note` lost its `tight` kind and the "the band absorbs the margin" claim.
+Next:     engine (step 2) — WC slot, ENTREE naming the band, F2, footprint sliding off the
+          party walls during search (visible on the F4 preset), seed that fails its gates.
