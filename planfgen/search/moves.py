@@ -27,8 +27,10 @@ from dataclasses import replace
 
 from planfgen.brief.footprint import (
     fit_footprint,
+    party_span,
     place_footprint,
 )
+from planfgen.brief.parcel import EdgeType
 from planfgen.brief.plan import Brief, InfeasibleBrief
 from planfgen.partition.grid import StructuralGrid
 from planfgen.partition.tree import (
@@ -285,14 +287,20 @@ def slide_footprint(brief: Brief, rng: random.Random) -> Brief:
     except ValueError:
         return brief
 
-    free_x = (hix - lox) - footprint.w
-    free_y = (hiy - loy) - footprint.h
+    # Never off a party wall. A MITOYEN edge is built up to; sliding away from
+    # it leaves a strip of land against the neighbour that nobody can use or
+    # reach, which is what the studio's F4 preset showed (2026-09-27).
+    sides = brief.parcel.sides()
+    locked_x = _walled(sides, "left") or _walled(sides, "right")
+    locked_y = _walled(sides, "bottom") or _walled(sides, "top")
+    free_x = 0.0 if locked_x else (hix - lox) - footprint.w
+    free_y = 0.0 if locked_y else (hiy - loy) - footprint.h
     if free_x <= SLIDE_TOL and free_y <= SLIDE_TOL:
         return brief                      # the building fills its site
 
     def step(low: float, free: float, at: float) -> float:
         if free <= SLIDE_TOL:
-            return low
+            return at
         moved = at + rng.uniform(-SLIDE_STEP, SLIDE_STEP) * free
         return min(max(moved, low), low + free)
 
@@ -324,6 +332,11 @@ def shape_footprint(
     footprint = brief.footprint
     if footprint is None or tree is None:
         return brief
+    span_w, span_d = party_span(brief.parcel)
+    if (span_w is not None and abs(footprint.w - span_w) <= SLIDE_TOL) or (
+        span_d is not None and abs(footprint.h - span_d) <= SLIDE_TOL
+    ):
+        return brief                      # spans its party walls; no proportion to choose
     aspect = footprint.aspect * math.exp(rng.uniform(-SHAPE_STEP, SHAPE_STEP))
     try:
         solved = fit_footprint(
@@ -335,6 +348,11 @@ def shape_footprint(
     return replace(
         brief, footprint=placed if placed.buildable(brief.parcel) else solved
     )
+
+
+def _walled(sides: dict, side: str) -> bool:
+    spec = sides.get(side)
+    return spec is not None and spec.kind is EdgeType.MITOYEN
 
 
 #: Every move on the brief, for the annealer to draw from.

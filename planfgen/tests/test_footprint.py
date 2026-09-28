@@ -246,7 +246,9 @@ def test_a_bigger_parcel_gives_the_same_building_not_a_bigger_one():
     On the old behaviour the same programme on a parcel 2.5x its size produced
     rooms 2.9x too large, because the footprint was the site.
     """
-    small = fit_footprint(programme(), parcel(13.0, 10.4), P, tree())
+    # Both at the same proportion, stated: between party walls the default is
+    # to span them (`party_span`), and 13 m and 20.6 m are not the same width.
+    small = fit_footprint(programme(), parcel(13.0, 10.4), P, tree(), aspect=1.25)
     large = fit_footprint(programme(), parcel(20.6, 16.5), P, tree(), aspect=1.25)
     assert small.area == pytest.approx(large.area, rel=1e-9)
 
@@ -440,8 +442,11 @@ def test_fitting_does_not_change_what_a_calibrated_brief_generates():
     footprint that is essentially its parcel — within half a millimetre, and
     half a millimetre is precisely the amount that used to matter.
 
-    The *seed* is identical to six decimal places — the claim that matters,
-    since fitting an already-fitted brief should be a no-op. The searches then
+    The *seed* is identical to five decimal places — the claim that matters,
+    since fitting an already-fitted brief should be a no-op. (Six until
+    2026-09-28: between its party walls the fitted building now keeps the full
+    width and gives up its 0.7 mm in depth alone, which moves the seed's score
+    by 2e-6.) The searches then
     diverge slightly, because half a millimetre of envelope is enough to reroute
     which mutations pass their gates, and since S15 the footprint is a search
     variable of its own.
@@ -451,18 +456,24 @@ def test_fitting_does_not_change_what_a_calibrated_brief_generates():
 
     raw = apartment_brief()
     fitted = fit_brief(raw, seed_tree())
-    assert fitted.footprint.w < raw.parcel.outline.bounds[2], "genuinely inside"
+    # Between its party walls the building spans the lot, so it is inside in
+    # depth only — by half a millimetre or so.
+    assert fitted.footprint.w == pytest.approx(raw.parcel.outline.bounds[2])
+    assert fitted.footprint.h < raw.parcel.outline.bounds[3], "genuinely inside"
 
     seeded = [
         evaluate(seed_tree(), b, grid_for(b), apartment_graph(), 0).scores.globale
         for b in (raw, fitted)
     ]
-    assert seeded[1] == pytest.approx(seeded[0], abs=1e-6)
+    assert seeded[1] == pytest.approx(seeded[0], abs=1e-5)
 
     before = anneal(raw, seed_tree(), 200, seed=3, graph=apartment_graph())
     after = anneal(fitted, seed_tree(), 200, seed=3, graph=apartment_graph())
     assert len(after) == len(before) > 0
-    assert after[0].scores.globale == pytest.approx(before[0].scores.globale, rel=0.02)
+    # No worse. It was "within 2 %" until 2026-09-28; since then a building
+    # spanning its party walls is neither reshaped nor slid off them, the walk
+    # takes a different path, and it scored 0.832 against 0.801.
+    assert after[0].scores.globale >= before[0].scores.globale * 0.98
 
 
 # --- a tree the programme cannot support ------------------------------------
@@ -581,3 +592,36 @@ def test_a_bracket_that_runs_out_reports_what_it_measured():
     assert "40.00 m2" in message, "the delivery it actually measured"
     assert "the constraint is the tree, not the site" in message
     assert "probabl" not in message
+
+
+# --- party walls ------------------------------------------------------------
+
+
+def test_between_two_party_walls_the_building_spans_the_lot():
+    """2026-09-28. At the parcel's own proportion a building stopped short of
+    one party wall and left a strip against the neighbour that nobody can use
+    or reach; the studio's F4 preset showed 1.9 m of it."""
+    site = parcel(13.0, 10.4)
+    assert FP.party_span(site) == (13.0, None)
+
+    solved = fit_footprint(programme(), site, P, tree())
+    assert solved.w == pytest.approx(13.0)
+    brief = FP._brief(programme(), site, P, solved)
+    assert delivered(solved, programme(), site, P, tree()) == pytest.approx(
+        sized_demand(programme(), tree()), abs=1e-6
+    )
+    assert brief.footprint.buildable(site)
+
+
+def test_a_strip_is_not_imposed():
+    """Wall to wall on a lot far too wide for the programme is a strip no
+    arrangement furnishes; the parcel's own proportion is used instead."""
+    site = parcel(40.0, 30.0)
+    solved = fit_footprint(programme(), site, P, tree())
+    assert solved.w < 40.0
+    assert max(solved.aspect, 1 / solved.aspect) <= FP.PARTY_SPAN_MAX_ASPECT
+
+
+def test_an_asked_for_proportion_is_honoured_between_party_walls():
+    solved = fit_footprint(programme(), parcel(13.0, 10.4), P, tree(), aspect=1.0)
+    assert solved.aspect == pytest.approx(1.0)

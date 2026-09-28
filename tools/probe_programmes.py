@@ -8,9 +8,9 @@ what an architect in the agency would actually type — an F2 to an F4, sized th
 way Moroccan flats are sized, on lots the size they come in — through exactly
 what `studio/app.py` does: `seed_tree`, then `anneal` on the brief as built.
 
-Column `studio` is the studio as it stands, building on the whole parcel.
-Column `fit` sends the same brief through `fit_brief` first. The difference
-between the two columns is the argument for wiring the solver into the studio.
+Column `whole` builds on the whole parcel from the plain spine seed — the
+studio before 2026-09-27. Column `studio` is what the studio does now:
+`pipeline.generate`, which fits a footprint per seed and tries them in order.
 
 The `-WC` and `-Entree` rows are the same programmes with the separate WC folded
 into the SDB and the ENTREE line removed, which isolates the two programme lines
@@ -28,9 +28,9 @@ from planfgen.brief import (
     Brief, EdgeSpec, EdgeType, Orientation, Parcel, Programme, RoomSpec, RoomType,
     check_feasibility,
 )
-from planfgen.brief.footprint import fit_brief
 from planfgen.brief.regulation import PROFILES
 from planfgen.search import RunStats, anneal
+from planfgen.studio.pipeline import generate
 from planfgen.studio.seed import seed_tree
 from planfgen.topology import ProgrammeGraph, Relation, RelationType
 
@@ -113,18 +113,21 @@ def probe(rooms, width: float, depth: float, profile, fit: bool) -> str:
     brief = brief_for(rooms, width, depth, profile)
     if not brief.budget.ok:
         return f"infeasible ({brief.budget.deficit:.1f} m2 short)"
-    tree = seed_tree(brief.programme)
-    if fit:
-        brief = fit_brief(brief, tree)
     graph = relations(rooms)
     found, best, refused = 0, 0.0, Counter()
     for seed in SEEDS:
-        stats = RunStats()
-        result = anneal(brief, tree, ITERATIONS, seed=seed, graph=graph, stats=stats)
+        if fit:
+            run = generate(brief, graph, seed, ITERATIONS)
+            stats, result = run.stats, run.result
+        else:
+            stats = RunStats()
+            found_ = anneal(brief, seed_tree(brief.programme), ITERATIONS,
+                            seed=seed, graph=graph, stats=stats)
+            result = found_[0] if found_ else None
         refused.update(stats.rejected_by)
-        if result:
+        if result is not None:
             found += 1
-            best = max(best, result[0].scores.globale)
+            best = max(best, result.scores.globale)
     top = refused.most_common(1)
     why = f"{top[0][0]}" if top and not found else ""
     return f"{found}/{len(SEEDS)} {best:.3f} {why}".strip()
@@ -135,7 +138,7 @@ def main() -> None:
     for name in names:
         profile = PROFILES[name]
         print(f"\n=== {name} ===")
-        print(f"{'programme':18} {'lot':7} {'studio':22} {'fit':22}")
+        print(f"{'programme':18} {'lot':7} {'whole':22} {'studio':22}")
         for programme, width, depth in CASES:
             for label, rooms in (
                 (programme, PROGRAMMES[programme]),

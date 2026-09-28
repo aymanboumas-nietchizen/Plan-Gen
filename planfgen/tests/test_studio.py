@@ -405,3 +405,48 @@ def test_a_fitted_footprint_leaves_the_rest_of_the_lot_unbuilt():
     assert not fitting.shrunk
     assert fitting.footprint.w * fitting.footprint.h < brief.parcel.outline.area
     assert "n'est pas bati" in fitting.note
+
+
+# --- the zoned seed, and building wall to wall --------------------------------
+
+from planfgen.studio.pipeline import attempts  # noqa: E402
+from planfgen.studio.seed import seed_trees, zoned_tree  # noqa: E402
+
+
+def test_the_zoned_seed_puts_the_day_rooms_in_one_row_and_the_night_behind():
+    brief, _ = preset_brief("F4", P)
+    tree = zoned_tree(brief.programme)
+    day, night = tree.root.children
+    assert sorted(leaf.nom for leaf in SlicingTree(day).leaves()) == ["Cuisine", "Sejour"]
+    assert isinstance(night, BandCut), "the corridor serves the night zone"
+    assert seed_trees(brief.programme)[0] is not None
+    assert len(seed_trees(brief.programme)) == 2
+
+
+def test_a_programme_with_no_day_zone_has_no_zoned_seed():
+    brief, _ = studio_brief(
+        [("Ch1", "CHAMBRE", 12.0, ""), ("Ch2", "CHAMBRE", 12.0, ""),
+         ("Couloir", "COULOIR", 5.0, "")]
+    )
+    assert zoned_tree(brief.programme) is None
+    assert len(seed_trees(brief.programme)) == 1
+
+
+def test_the_f4_preset_is_built_wall_to_wall():
+    """2026-09-28. At the parcel's own proportion the F4 stopped 1.9 m short of
+    the east party wall. Between two party walls it now spans the lot."""
+    brief, graph = preset_brief("F4", PROFILES["casablanca"])
+    run = generate(brief, graph, seed=1, iterations=200)
+
+    assert run.ok, run.stats.explain()
+    assert run.result.brief.footprint.w == pytest.approx(brief.parcel.outline.bounds[2])
+    assert "restent libres" not in run.fitting.note
+
+
+def test_a_fallback_off_the_party_walls_is_said_on_the_page():
+    brief, _ = preset_brief("F4", P)
+    tried = attempts(brief)
+    wall_to_wall = [f for _, f in tried if "restent libres" not in f.note]
+    fallback = [f for _, f in tried if "restent libres" in f.note]
+    assert wall_to_wall and fallback, "both are tried, wall to wall first"
+    assert tried[0][1] in wall_to_wall

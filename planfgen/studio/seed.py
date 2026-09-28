@@ -33,6 +33,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from planfgen.brief import AreaBudget, Programme
+from planfgen.brief.programme import RoomType
 from planfgen.partition import BandCut, Cut, Direction, Leaf, SlicingTree
 
 #: The fewest rooms beside the circulation that can be cut into a plan.
@@ -112,9 +113,63 @@ def seed_tree(programme: Programme) -> SlicingTree:
     return SlicingTree(Cut(Direction.V, False, halves))
 
 
-def _chain(noms: list[str]) -> Leaf | Cut:
+def _chain(noms: list[str], direction: Direction = Direction.H) -> Leaf | Cut:
     """The rooms of one half, stacked."""
     node: Leaf | Cut = Leaf(noms[-1])
     for nom in reversed(noms[:-1]):
-        node = Cut(Direction.H, False, (Leaf(nom), node))
+        node = Cut(direction, False, (Leaf(nom), node))
     return node
+
+
+#: The rooms of the day zone. Everything else that is not a corridor sleeps,
+#: washes or stores, and goes behind.
+DAY_ROOMS = frozenset({RoomType.SEJOUR, RoomType.CUISINE, RoomType.ENTREE})
+
+
+def zoned_tree(programme: Programme) -> SlicingTree | None:
+    """Day zone along the street, night zone behind, the corridor serving it.
+
+    The parti of nearly every Moroccan flat, and measured to matter
+    (2026-09-28, `tools/probe_programmes.py`): between two party walls the
+    building is as wide as the lot, and the plain spine of `seed_tree` then
+    cuts sides 5-6 m deep, which leaves an 11 m2 bedroom 2.3 m wide. The F4
+    preset went from 0 of 4 plans to 4 of 4 on this seed.
+
+    The root cut is horizontal, so the day row is the one on the entry edge
+    when the street is at the bottom of the drawing, which is how the studio
+    draws it; on any other entry the search moves it. The night rooms are
+    split between the corridor's two sides by area, largest first.
+
+    None when there is no day zone, or too little night to cut into two sides.
+    """
+    rooms = [r for r in programme.rooms if not r.kind.names_band]
+    day = [r.nom for r in rooms if r.kind in DAY_ROOMS]
+    night = sorted(
+        (r for r in rooms if r.kind not in DAY_ROOMS),
+        key=lambda r: -r.surface_utile,
+    )
+    if not day or len(night) < 2:
+        return None
+    sides: tuple[list[str], list[str]] = ([], [])
+    areas = [0.0, 0.0]
+    for room in night:
+        i = 0 if areas[0] <= areas[1] else 1
+        sides[i].append(room.nom)
+        areas[i] += room.surface_utile
+    halves = (_chain(sides[0]), _chain(sides[1]))
+    spine = (
+        BandCut(Direction.V, halves)
+        if programme.band_rooms
+        else Cut(Direction.V, False, halves)
+    )
+    return SlicingTree(Cut(Direction.H, False, (_chain(day, Direction.V), spine)))
+
+
+def seed_trees(programme: Programme) -> list[SlicingTree]:
+    """Every seed worth starting from, the preferred first.
+
+    The caller fits each and keeps the one nearest to passing; on a tie the
+    earlier wins, which is why the zoned parti leads.
+    """
+    zoned = zoned_tree(programme)
+    return ([zoned] if zoned is not None else []) + [seed_tree(programme)]

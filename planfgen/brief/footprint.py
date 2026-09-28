@@ -68,6 +68,14 @@ BRACKET_TRIES = 40
 #: Containment slack, in m.
 WITHIN_TOL = 1e-9
 
+#: The most elongated building the party-wall rule will impose. Between two
+#: party walls a building takes the full width and only its depth is solved —
+#: but on a wide lot with a small programme that is a strip no arrangement can
+#: furnish, and the rule would be imposing the fault it exists to avoid. At 2:1
+#: and beyond, the parcel's own proportion is used instead, which is where a
+#: 26 x 12 m parcel was measured to find nothing (`test_footprint_place`).
+PARTY_SPAN_MAX_ASPECT = 2.0
+
 
 @dataclass(frozen=True)
 class Footprint:
@@ -184,6 +192,41 @@ class Footprint:
         )
 
 
+def party_span(parcel: Parcel) -> tuple[float | None, float | None]:
+    """(width, depth) that the party walls fix, or None on a free axis.
+
+    A MITOYEN edge is built up to — that is what makes it a party wall — so a
+    building between two of them spans the whole buildable width, and leaving
+    a strip against either one leaves land nobody can use or reach. An axis is
+    fixed only when BOTH its sides are party walls without a setback; one party
+    wall fixes where the building stands (`place_footprint`), not its size.
+    """
+    sides = parcel.sides()
+
+    def walled(side: str) -> bool:
+        spec = sides.get(side)
+        return spec is not None and spec.kind is EdgeType.MITOYEN and spec.setback == 0
+
+    lox, loy, hix, hiy = parcel.buildable_bounds()
+    width = hix - lox if walled("left") and walled("right") else None
+    depth = hiy - loy if walled("bottom") and walled("top") else None
+    return width, depth
+
+
+def _between_party_walls(
+    area: float, parcel: Parcel, width: float | None, depth: float | None
+) -> Footprint:
+    """A footprint of this gross area spanning the fixed dimension, centred."""
+    lox, loy, hix, hiy = parcel.buildable_bounds()
+    if width is not None:
+        w, h = width, area / width
+    else:
+        w, h = area / depth, depth
+    return Footprint(
+        x=lox + ((hix - lox) - w) / 2, y=loy + ((hiy - loy) - h) / 2, w=w, h=h
+    )
+
+
 def sized_demand(programme: Programme, tree: SlicingTree) -> float:
     """Net area in m² the tree's **leaves** ask for.
 
@@ -228,7 +271,9 @@ def fit_footprint(
 
     One unknown — the gross built area — and `delivered` is monotone in it, so a
     secant clamped inside a bracket converges in four steps from `BRACKET_LOW`
-    to `BRACKET_HIGH`. `aspect` defaults to the parcel's own proportion.
+    to `BRACKET_HIGH`. `aspect` defaults to the parcel's own proportion —
+    except between two party walls, where the width is the site's and only the
+    depth is solved (`party_span`, and `PARTY_SPAN_MAX_ASPECT` for when not).
 
     A tree the programme cannot support at all — more bands than circulation
     rooms to name them — raises `UnrealisableTree` out of the first `delivered`,
@@ -253,14 +298,25 @@ def fit_footprint(
     demand = sized_demand(programme, tree)
     if demand <= 0:
         raise ValueError("a tree whose leaves demand no area has no footprint")
+
+    # Between two party walls the width is the site's, not a choice — unless
+    # the caller asked for a proportion, or both axes are walled (then there
+    # is no dimension left to solve), or it would make a strip.
+    span_w, span_d = party_span(parcel) if aspect is None else (None, None)
+    if span_w is not None and span_d is not None:
+        span_w = span_d = None
     if aspect is None:
         minx, miny, maxx, maxy = parcel.outline.bounds
         aspect = (maxx - minx) / (maxy - miny)
 
+    def shaped(area: float) -> Footprint:
+        if span_w is not None or span_d is not None:
+            return _between_party_walls(area, parcel, span_w, span_d)
+        return Footprint.centred(area, aspect, parcel)
+
     def shortfall(area: float) -> float:
         """Signed: negative means the footprint is too small."""
-        return delivered(Footprint.centred(area, aspect, parcel), programme,
-                         parcel, profile, tree) - demand
+        return delivered(shaped(area), programme, parcel, profile, tree) - demand
 
     lo, hi, f_hi = _bracket(shortfall, demand)
 
@@ -287,7 +343,16 @@ def fit_footprint(
             f"last residual {shortfall(b):.3e} m2 against a demand of {demand:.2f} m2"
         )
 
-    solved = Footprint.centred(b, aspect, parcel)
+    solved = shaped(b)
+    if span_w is not None or span_d is not None:
+        elongation = max(solved.aspect, 1 / solved.aspect)
+        if elongation > PARTY_SPAN_MAX_ASPECT or not solved.buildable(parcel):
+            # A strip, or deeper than the lot: the party-wall rule would impose
+            # the fault it exists to avoid. Solve at the parcel's proportion;
+            # `place_footprint` still puts the building against a party wall.
+            return fit_footprint(
+                programme, parcel, profile, tree, aspect, tol, max_steps
+            )
     if not solved.buildable(parcel):
         budget = _budget_for(programme, parcel, profile, tree, demand)
         if not budget.ok:
