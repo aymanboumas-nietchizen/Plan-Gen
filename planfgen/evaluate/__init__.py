@@ -18,6 +18,7 @@ from planfgen.evaluate.constraints import (
     Gate,
     all_gates,
     fabric_of,
+    violation,
 )
 from planfgen.evaluate.metrics import Scores, facings, score
 
@@ -38,4 +39,5 @@ __all__ = [
     "fabric_of",
     "facings",
     "score",
+    "violation",
 ]

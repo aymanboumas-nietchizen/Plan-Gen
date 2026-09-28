@@ -33,6 +33,27 @@ def fits(space_or_cell, spec: FurnitureSpec, profile: RegulationProfile | None =
     return spec.max_ratio is None or long / short <= spec.max_ratio
 
 
+def shortfall(space_or_cell, spec: FurnitureSpec, profile: RegulationProfile | None = None) -> float:
+    """How far a room is from fitting `spec`, as a sum of relative misses.
+
+    Zero exactly when `fits` is True. Not a score and never used as one: the
+    furniture gate stays a gate. This only tells the search, while nothing has
+    passed yet, which of two failing rooms is nearer to passing — a 0.82 m WC
+    is nearer than a 0.60 m one, and a blind walk cannot tell them apart.
+    """
+    width, height = (
+        space_or_cell.net_dims() if profile is None else space_or_cell.net_dims(profile)
+    )
+    short, long = (width, height) if width <= height else (height, width)
+    if short <= 0:
+        return 1.0 + (spec.min_side + spec.min_long) / max(spec.min_side, 1e-9)
+    miss = max(0.0, spec.min_side - short) / spec.min_side
+    miss += max(0.0, spec.min_long - long) / spec.min_long
+    if spec.max_ratio is not None:
+        miss += max(0.0, long / short / spec.max_ratio - 1.0)
+    return miss
+
+
 def fit_report(plan, profile: RegulationProfile) -> dict[str, bool]:
     """Per room, whether its furniture fits. Rooms with no spec always pass.
 
@@ -110,3 +131,16 @@ def table_conflicts(profile: RegulationProfile) -> list[TableConflict]:
                 )
             )
     return found
+
+
+def furniture_shortfall(plan, profile: RegulationProfile) -> float:
+    """`shortfall` summed over a `PartitionPlan`'s rooms. Zero iff every room fits."""
+    programme = plan.brief.programme
+    total = 0.0
+    for cell in plan.cells:
+        if cell.is_band:
+            continue
+        spec = FURNITURE.get(programme.by_nom(cell.nom).kind)
+        if spec is not None:
+            total += shortfall(cell, spec, profile)
+    return total

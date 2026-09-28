@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from planfgen.brief.footprint import Footprint
 from planfgen.brief.plan import Brief
-from planfgen.evaluate.constraints import all_gates
+from planfgen.evaluate.constraints import UNREALISABLE, all_gates, violation
 from planfgen.evaluate.metrics import Scores, score
 from planfgen.partition.grid import StructuralGrid
 from planfgen.partition.plan import PartitionPlan
@@ -31,9 +31,24 @@ from planfgen.topology.relations import ProgrammeGraph
 KEEP_BEST = 10
 
 #: While no valid candidate has been found, the chance of jumping back to the
-#: seed rather than drifting further. Without it the walk diverges: measured at
-#: 0 valid plans in 200 iterations on the v1 brief, against 25 with it.
-RESTART = 0.35
+#: seed rather than walking on. Without any return the walk diverges (0 valid
+#: plans in 200 iterations on the v1 brief, 25 with a return at 0.35).
+#:
+#: The walk is guided now — see `UPHILL` and `violation` — and was tried
+#: returning to the nearest tree it had found instead of to the seed. That lost:
+#: a seed a few moves from valid is the commonest case, and the nearest-so-far
+#: walked away from it. Measured 2026-09-28 on 72 real-programme runs, a 26 x 12
+#: m parcel at aspect 1.25 (3 seeds) and the studio's corridorless programme (4):
+#:
+#:     blind, return 0.35 (before)          23 / 72    3 / 3    4 / 4
+#:     guided, return to nearest 0.05       25 / 72    1 / 3    2 / 4
+#:     guided, return to seed 0.35          25 / 72    3 / 3    4 / 4
+#:     guided, return to seed 0.50          26 / 72    3 / 3    4 / 4   <- this
+RESTART = 0.50
+
+#: While nothing is valid, the chance of taking a step that moves further from
+#: passing. At 0.10 and above the walk is nearly blind again (21 / 72 at 0.30).
+UPHILL = 0.05
 
 #: How often the search moves the *building* rather than the plan inside it.
 #: Only ever on a brief that has a footprint — one without builds on its whole
@@ -137,24 +152,32 @@ def evaluate(
     iteration: int,
 ) -> Result | None:
     """Realise, gate, and score. `None` means the candidate was discarded."""
+    return _assess(tree, brief, grid, graph, iteration, measure=False)[0]
+
+
+def _assess(
+    tree: SlicingTree,
+    brief: Brief,
+    grid: StructuralGrid,
+    graph: ProgrammeGraph | None,
+    iteration: int,
+    measure: bool,
+) -> tuple[Result | None, str | None, float]:
+    """One realise for everything the loop wants to know about a candidate.
+
+    Returns the result (or None), the first gate that refused it, and — when
+    `measure` — how far it is from passing. The distance is only asked for
+    while nothing valid has been found; after that the gates alone decide.
+    """
     try:
         plan = tree.realise(envelope_of(brief), brief, grid)
     except ValueError:
-        return None
-    passed, _failure = all_gates(plan, brief)
+        return None, "unrealisable", UNREALISABLE
+    passed, failure = all_gates(plan, brief)
     if not passed:
-        return None
-    return Result(tree=tree, plan=plan, scores=score(plan, brief, graph), iteration=iteration)
-
-
-def _why(tree: SlicingTree, brief: Brief, grid: StructuralGrid) -> str:
-    """The gate that turned a candidate away, for the run statistics."""
-    try:
-        plan = tree.realise(envelope_of(brief), brief, grid)
-    except ValueError:
-        return "unrealisable"
-    _passed, failure = all_gates(plan, brief)
-    return failure or "none"
+        return None, failure, violation(plan, brief) if measure else 0.0
+    result = Result(tree=tree, plan=plan, scores=score(plan, brief, graph), iteration=iteration)
+    return result, None, 0.0
 
 
 def anneal(
@@ -176,7 +199,9 @@ def anneal(
     rng = random.Random(seed)
     stats = stats if stats is not None else RunStats()
 
-    current = evaluate(tree0, brief, grid_for(brief), graph, 0)
+    current, _, start_violation = _assess(
+        tree0, brief, grid_for(brief), graph, 0, measure=True
+    )
     best: list[Result] = [current] if current else []
     if n_iter <= 0:
         return best
@@ -194,6 +219,9 @@ def anneal(
     walk = current.tree if current else tree0
     walk_brief = current.brief if current else brief
     movable = brief.footprint is not None
+    # While nothing is valid: how far the walk is from passing. See `violation`
+    # — this steers, it never scores.
+    walk_violation = start_violation
 
     for iteration in range(1, n_iter + 1):
         chance = P_FOOTPRINT if current is not None else P_FOOTPRINT_COLD
@@ -205,27 +233,30 @@ def anneal(
             candidate_brief = walk_brief
         grid = grid_for(candidate_brief)
         stats.proposed += 1
-        candidate = evaluate(candidate_tree, candidate_brief, grid, graph, iteration)
+        candidate, failure, distance = _assess(
+            candidate_tree, candidate_brief, grid, graph, iteration,
+            measure=current is None,
+        )
 
         if candidate is None:
-            stats.reject(_why(candidate_tree, candidate_brief, grid))
-            # Nothing valid has been found yet, so there is no hill to climb.
-            # Drift, so a seed that fails its own gates is not mutated forever
-            # in place — but restart from the seed often enough that the walk
-            # cannot wander off into ever stranger trees, which is what an
-            # unbounded random walk does and it never comes back.
+            stats.reject(failure)
+            # Nothing valid has been found yet, so there is no score to climb —
+            # but there is a distance to close. Step when the candidate is no
+            # further from passing than the walk, and now and then when it is;
+            # otherwise, often, go back to the seed rather than wander.
+            #
+            # The return is on the *tree* only. The footprint is neither
+            # unbounded nor high-dimensional, and throwing it away too would
+            # mean the building could never travel from the proportion it was
+            # fitted at to one that works — on a long thin parcel, the whole
+            # difficulty.
             if current is None:
-                if rng.random() < RESTART:
-                    walk = tree0
-                else:
-                    walk = candidate_tree
-                # The restart is on the *tree* only. Its job is to stop an
-                # unbounded walk wandering into ever stranger trees, and the
-                # footprint is neither unbounded nor high-dimensional — throwing
-                # it away too would mean the building could never travel from
-                # the proportion it was fitted at to one that works, which on a
-                # long thin parcel is the whole difficulty.
-                walk_brief = candidate_brief
+                if distance <= walk_violation or rng.random() < UPHILL:
+                    walk, walk_brief, walk_violation = (
+                        candidate_tree, candidate_brief, distance
+                    )
+                elif rng.random() < RESTART:
+                    walk, walk_violation = tree0, start_violation
         else:
             if current is None or _accept(candidate.cost - current.cost, temperature, rng):
                 current = candidate

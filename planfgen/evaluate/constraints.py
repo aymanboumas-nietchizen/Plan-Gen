@@ -34,7 +34,7 @@ from planfgen.brief.footprint import Footprint
 from planfgen.brief.plan import Brief
 from planfgen.circulation.reachable import reachable
 from planfgen.circulation.shape import circulation_runs
-from planfgen.habitability.check import fit_report
+from planfgen.habitability.check import fit_report, furniture_shortfall
 
 #: How far a room's net area may miss its target and still be a plan, as a
 #: fraction. Free cuts are exact, so this slack exists for structural ones,
@@ -188,3 +188,60 @@ def all_gates(plan, brief: Brief) -> tuple[bool, str | None]:
         if not gate.check(plan, brief):
             return False, gate.name
     return True, None
+
+
+# --- how far from passing --------------------------------------------------
+#
+# Not a score. A candidate that fails a gate is still discarded, at every
+# temperature, and nothing below is ever added to `metrics.score`. What this
+# answers is a different question, asked only while the search has found
+# nothing valid at all: of two refused candidates, which is nearer to passing?
+#
+# Without it the walk was blind. `anneal` refused every candidate from a seed
+# that failed its own gates and drifted at random, and on real programmes it
+# never arrived anywhere: 500 proposed, 0 accepted, on an F3 of 70 m2
+# (PROGRESS.md S23). Every refusal looked the same.
+
+#: A tree that cannot be realised at all is further from passing than any tree
+#: that can. Each stage outranks every amount in the stage below it.
+UNREALISABLE = 1000.0
+
+#: Candidates failing a cheap gate outrank those that only fail on the wall
+#: graph: getting areas and furniture right is the larger part of the way.
+CHEAP_STAGE = 100.0
+
+
+def violation(plan, brief: Brief) -> float:
+    """How far `plan` is from passing every gate. Zero iff `all_gates` passes.
+
+    Staged, so the walk fixes geometry before paying for the wall graph: the
+    cheap gates (area, coverage, minimum area, furniture) are measured first,
+    and only a plan that clears all of them is built into a fabric and counted
+    for dead ends and unreachable rooms.
+    """
+    profile = brief.profile
+    programme = brief.programme
+
+    cheap = sum(max(0.0, abs(e) - AREA_TOLERANCE) for e in plan.area_error(profile).values())
+    footprint = Footprint.from_envelope(plan.envelope_rect, profile)
+    cheap += max(0.0, footprint.coverage(brief.parcel) - profile.coverage_max - COVERAGE_TOLERANCE)
+    for cell in plan.cells:
+        minimum = profile.min_area.get(programme.by_nom(cell.nom).kind)
+        if minimum:
+            net_w, net_h = cell.net_dims(profile)
+            cheap += max(0.0, minimum - net_w * net_h) / minimum
+    cheap += furniture_shortfall(plan, profile)
+    if cheap > 0.0:
+        return CHEAP_STAGE + cheap
+
+    try:
+        fabric = fabric_of(plan, brief)
+        runs = circulation_runs(fabric)
+        report = reachable(fabric)
+    except (ValueError, KeyError):
+        return CHEAP_STAGE
+    return float(
+        len(runs.dead_ends(profile.corridor_clear))
+        + len(report.unreachable)
+        + len(report.through_room)
+    )

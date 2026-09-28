@@ -396,3 +396,85 @@ def test_no_other_room_has_that_problem():
 
     areas = [c.kind for c in table_conflicts(P) if c.issue == "area"]
     assert areas == [RoomType.WC]
+
+
+# --- how far from passing ----------------------------------------------------
+#
+# `violation` steers the search while nothing valid has been found. It is not a
+# score and must never become one, so the tests pin the two things that keep it
+# honest: it is zero exactly when the gates pass, and it orders refusals by how
+# far they are from passing.
+
+import random  # noqa: E402
+
+from planfgen.evaluate import all_gates, violation  # noqa: E402
+from planfgen.habitability.check import shortfall  # noqa: E402
+from planfgen.search import envelope_of, grid_for  # noqa: E402
+from planfgen.search.moves import mutate  # noqa: E402
+from planfgen.tests.test_search import apartment_brief, seed_tree  # noqa: E402
+
+
+class _Room:
+    def __init__(self, w: float, h: float) -> None:
+        self.w, self.h = w, h
+
+    def net_dims(self) -> tuple[float, float]:
+        return (self.w, self.h)
+
+
+def test_furniture_shortfall_is_zero_exactly_when_the_room_fits():
+    sides = [x / 10 for x in range(1, 80)]
+    for spec in FURNITURE.values():
+        for w in sides:
+            for h in sides[::4]:
+                room = _Room(w, h)
+                assert fits(room, spec) == (shortfall(room, spec) == 0.0), (spec, w, h)
+
+
+def test_a_narrower_wc_is_further_from_fitting():
+    """What a blind walk could not see: 0.82 m is nearer to a WC than 0.60 m."""
+    wc = FURNITURE[RoomType.WC]
+    assert 0.0 < shortfall(_Room(0.82, 2.4), wc) < shortfall(_Room(0.60, 3.3), wc)
+
+
+def test_violation_is_zero_exactly_when_every_gate_passes():
+    """On plans the engine really produces: the seed and 200 trees around it."""
+    brief = apartment_brief()
+    grid = grid_for(brief)
+    rng = random.Random(0)
+    seen = {True: 0, False: 0}
+    for _ in range(200):
+        tree = seed_tree()
+        for _ in range(rng.randint(0, 6)):
+            tree = mutate(tree, rng, grid, 1)
+        try:
+            plan = tree.realise(envelope_of(brief), brief, grid)
+        except ValueError:
+            continue
+        passed, _ = all_gates(plan, brief)
+        seen[passed] += 1
+        assert passed == (violation(plan, brief) == 0.0)
+    assert seen[True] and seen[False], f"the sample must hold both kinds: {seen}"
+
+
+def test_a_plan_failing_a_cheap_gate_is_further_than_one_failing_only_the_wall_graph():
+    """Staged: areas and furniture first, doors and reach after."""
+    from planfgen.evaluate.constraints import CHEAP_STAGE
+
+    brief = apartment_brief()
+    grid = grid_for(brief)
+    rng = random.Random(1)
+    cheap, fabric = [], []
+    for _ in range(300):
+        tree = seed_tree()
+        for _ in range(rng.randint(1, 8)):
+            tree = mutate(tree, rng, grid, 1)
+        try:
+            plan = tree.realise(envelope_of(brief), brief, grid)
+        except ValueError:
+            continue
+        v = violation(plan, brief)
+        (cheap if v >= CHEAP_STAGE else fabric).append(v)
+    assert cheap, "the sample must hold a plan failing a cheap gate"
+    assert all(v < CHEAP_STAGE for v in fabric)
+    assert min(cheap) > max(fabric, default=0.0)
