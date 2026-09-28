@@ -1340,3 +1340,17 @@ Built:    `tools/probe_proportion.py`. Slots are the small rooms (Entree ~1.5x3.
           and allowing cuisine-via-sejour / SDB en suite: all unchanged. No engine code changed.
 Cause:    every room takes its corridor side's full depth; the search cannot BUILD a room behind a
           room or a cluster round a degagement. For planfgen-optima: a constructive move or grammar.
+
+---
+
+## S27 — Nesting: the walk cannot build it, construction can (planfgen-optima, no engine code)  2026-09-28
+
+Found:    (1) the search's footprint is frozen to its SEED: every 2-band tree misses its areas by 4.5-9 %
+          (gate 5 %), so no degagement is ever accepted; (2) valid plans are isolated — 3 of 34 505
+          two-move neighbours of a near-miss pass; (3) on the decret a T-junction (0.90 m) < door module.
+Built:    `tools/probe_construct.py` — `Finder`, a DFS over (rooms, extent, walls, served sides, bands)
+          that only builds trees whose rooms furnish and touch circulation. Tests: `test_nesting.py`.
+Result:   plans/18: F3+WC 2->18, F3+WC+deg 0->18, F4+WC 0->6, F4+WC+deg 0->14, presets 15/12->18/18;
+          probe_programmes 25->46/72. F2 unchanged (furniture-infeasible on sourced envelopes). Slots remain.
+Next:     planfgen-engine: search/construct.py, envelope follows the tree, seed generate from it — and make
+          it fast (45-90 s on a failing brief). Routed: open corridor junction (two strict xfails pin both).
