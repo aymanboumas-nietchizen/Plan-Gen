@@ -1324,3 +1324,19 @@ Limits:   separate 2 m2 WC — geometric: every room on one side of a single cor
           depth, a WC needs <= 2.2 m, bedrooms >= 2.4 m. Needs a degagement (second band), and a
           door module (1.00 m) wider than the decret corridor (0.80 m) forbids corridor-end doors:
           for planfgen-regs. F2: 1/4 placeholder only. Proportion (a 3.7 x 8.1 m sejour) untouched.
+
+---
+
+## S26 — Door dimensions, then proportion: two negative results      2026-09-28
+
+Doors:    door_leaf 0.80 / door_jamb 0.10 are unsourced placeholders, inherited by BOTH sourced
+          profiles. Tried 0.90 and 0.83 m modules: F3/F4 presets and every separate-WC variant
+          unchanged (one F3 plan on the decret). Constants NOT changed. Moroccan sources (decret
+          2-11-246, MHPV/AUT accessibility guides) are blocked by this environment's egress policy.
+WC:       with a Degagement the walk reaches 2-band plans where the WC fits (1.85 x 1.08) and all
+          is reachable but one room; 12 hand-built degagement seeds found 0 plans.
+Built:    `tools/probe_proportion.py`. Slots are the small rooms (Entree ~1.5x3.3, SDB ~1.7x4.1,
+          Cuisine ~2.1x5.3); the sejour is fine (mean 1.36:1). compacite formula, weight 0.15->0.30,
+          and allowing cuisine-via-sejour / SDB en suite: all unchanged. No engine code changed.
+Cause:    every room takes its corridor side's full depth; the search cannot BUILD a room behind a
+          room or a cluster round a degagement. For planfgen-optima: a constructive move or grammar.
