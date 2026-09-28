@@ -1308,3 +1308,19 @@ Tests:    test_studio 29 pass; every preset generates on every profile; F3 as th
 Changed:  `spine_note` lost its `tight` kind and the "the band absorbs the margin" claim.
 Next:     engine (step 2) — WC slot, ENTREE naming the band, F2, footprint sliding off the
           party walls during search (visible on the F4 preset), seed that fails its gates.
+
+---
+
+## S25 — Step 2: ENTREE, a guided walk, party walls, the zoned seed    2026-09-28
+
+Built:    `RoomType.names_band` (only COULOIR names a band; ENTREE is a hall, and a flat with one
+          is entered through it). `evaluate.violation` steers anneal while nothing passes — never a
+          score. `party_span`: wall to wall between two MITOYEN edges, no slide off them.
+          `seed.zoned_tree` (day row on the street, night zone behind); `pipeline.attempts` tries
+          wall-to-wall seeds first, then the parcel's proportion, and says so on the page.
+Tests:    351 pass, 1 known failure (earns_its_keep). Presets: F3 4/3/4 of 4, F4 2/2/2 of 4,
+          every plan entered through its entree; 8 of 9 preset/profile pairs build wall to wall.
+Limits:   separate 2 m2 WC — geometric: every room on one side of a single corridor shares its
+          depth, a WC needs <= 2.2 m, bedrooms >= 2.4 m. Needs a degagement (second band), and a
+          door module (1.00 m) wider than the decret corridor (0.80 m) forbids corridor-end doors:
+          for planfgen-regs. F2: 1/4 placeholder only. Proportion (a 3.7 x 8.1 m sejour) untouched.
