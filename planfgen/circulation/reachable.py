@@ -56,6 +56,11 @@ def entry_space(fabric: FabricPlan) -> Space:
     It must present a facade wall to the parcel's entry edge. An `ENTREE` wins
     outright; failing that any circulation space, because a corridor that meets
     the street *is* the hall; failing that the space with the longest frontage.
+
+    A plan whose programme has an ENTREE and does not come in through it has no
+    way in either. An entree at the back of the flat, reached from the corridor
+    the front door actually opens onto, is a room named after the wrong thing —
+    which the F4 preset produced on 2026-09-28 until this said so.
     """
     candidates: list[tuple[int, float, str, Space]] = []
     for space in fabric.spaces.values():
@@ -74,7 +79,15 @@ def entry_space(fabric: FabricPlan) -> Space:
             f"no space presents a facade wall to entry edge "
             f"{fabric.parcel.entry_edge}; the plan has no way in"
         )
-    return min(candidates, key=lambda c: c[:3])[3]
+    entry = min(candidates, key=lambda c: c[:3])[3]
+    halls = sorted(n for n, s in fabric.spaces.items() if s.kind is RoomType.ENTREE)
+    if halls and entry.kind is not RoomType.ENTREE:
+        raise ValueError(
+            f"{', '.join(halls)} has no facade on entry edge "
+            f"{fabric.parcel.entry_edge}; the front door would open onto "
+            f"{entry.nom}, not the entree"
+        )
+    return entry
 
 
 def reachable(fabric: FabricPlan) -> ReachabilityReport:

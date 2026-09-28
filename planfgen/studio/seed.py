@@ -143,7 +143,11 @@ def zoned_tree(programme: Programme) -> SlicingTree | None:
     None when there is no day zone, or too little night to cut into two sides.
     """
     rooms = [r for r in programme.rooms if not r.kind.names_band]
-    day = [r.nom for r in rooms if r.kind in DAY_ROOMS]
+    day = [r.nom for r in rooms if r.kind in DAY_ROOMS and r.kind is not RoomType.ENTREE]
+    # The hall goes in the middle of the row, where the corridor behind it
+    # starts: it has to meet the street (it is the way in) and the corridor.
+    halls = [r.nom for r in rooms if r.kind is RoomType.ENTREE]
+    day[len(day) // 2 : len(day) // 2] = halls
     night = sorted(
         (r for r in rooms if r.kind not in DAY_ROOMS),
         key=lambda r: -r.surface_utile,

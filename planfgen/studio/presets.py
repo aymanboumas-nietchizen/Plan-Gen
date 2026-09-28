@@ -5,19 +5,19 @@ Areas are ordinary Moroccan agency figures, not numbers calibrated to fill one
 parcel: since the studio sizes the footprint with `fit_brief`, the lot only has
 to be large enough, not exactly right.
 
-WHAT IS MISSING, AND WHY (measured 2026-09-27, `tools/probe_programmes.py`):
+WHAT IS MISSING, AND WHY (measured 2026-09-28 through `pipeline.generate`, four
+seeds on each profile):
 
-- **No separate WC.** A 2 m2 WC hung off the corridor takes the full depth of
-  its side and comes out ~0.8 m wide; the furniture gate refuses every plan.
-  The presets fold the WC into the SDB until the engine can place one.
-- **No ENTREE line.** ENTREE is a circulation type, so it names the band and the
-  COULOIR line silently drops out of the plan.
-- **No F2.** A corridor spine takes 17 % of 50 m2 and leaves the bedroom 2.46 m
-  wide; without one, the bedroom still does not furnish. 0 of 4 on every
-  profile either way.
+- **No separate WC.** A 2 m2 WC is furnishable only on a corridor side at most
+  2.2 m deep, bedrooms need 2.4-2.7 m, and every room on one side of a single
+  corridor shares its depth. F3 with a WC: 0 of 4 on every profile; with an
+  entree as well, 2, 0 and 1 of 4 (the WC can open off the hall). The presets
+  fold the WC into the SDB until the engine has a dégagement to hang it on.
+- **No F2.** 1 of 4 on the placeholder profile, none on the sourced ones.
 
-All three are engine work. When they land, add the lines back here and re-run
-the probe — every preset below generates on all three profiles today, and
+The ENTREE is back since 2026-09-28: it used to name the corridor band, and
+now it is a hall (`RoomType.names_band`). F3 and F4 with one: 4 of 4 on every
+profile. Every preset below generates on all three profiles, and
 `test_studio.py` holds it to that.
 """
 
@@ -52,7 +52,8 @@ def _flat(rooms: tuple[Room, ...]) -> tuple[Link, ...]:
         if kind in ("CHAMBRE", "CHAMBRE_PRINCIPALE", "SDB")
     ]
     links += [
-        ("Couloir", "Sejour", "CONNECTED", 2.0),
+        ("Entree", "Sejour", "CONNECTED", 2.0),
+        ("Entree", "Couloir", "CONNECTED", 2.0),
         ("Sejour", "Cuisine", "CONNECTED", 1.5),
         ("Cuisine", "SDB", "ADJACENT", 1.0),
         ("SDB", "Sejour", "SEPARATED", 1.0),
@@ -61,6 +62,7 @@ def _flat(rooms: tuple[Room, ...]) -> tuple[Link, ...]:
 
 
 _F3: tuple[Room, ...] = (
+    ("Entree", "ENTREE", 5.0, ""),
     ("Sejour", "SEJOUR", 24.0, "S"),
     ("Cuisine", "CUISINE", 9.0, "N"),
     ("Ch1", "CHAMBRE_PRINCIPALE", 13.0, "S"),
@@ -70,6 +72,7 @@ _F3: tuple[Room, ...] = (
 )
 
 _F4: tuple[Room, ...] = (
+    ("Entree", "ENTREE", 5.0, ""),
     ("Sejour", "SEJOUR", 30.0, "S"),
     ("Cuisine", "CUISINE", 11.0, "N"),
     ("Ch1", "CHAMBRE_PRINCIPALE", 14.0, "S"),
@@ -100,7 +103,7 @@ _DEMO_RELATIONS: tuple[Link, ...] = (
 
 #: In the order the selector shows them. The first is the default.
 PRESETS: dict[str, Preset] = {
-    "F3": Preset("F3 — 70 m2", _F3, _flat(_F3), 9.0, 11.0),
-    "F4": Preset("F4 — 94 m2", _F4, _flat(_F4), 11.0, 13.0),
+    "F3": Preset("F3 — 75 m2", _F3, _flat(_F3), 9.0, 11.0),
+    "F4": Preset("F4 — 99 m2", _F4, _flat(_F4), 11.0, 13.0),
     "DEMO": Preset("Demo — 12 x 10 m", _DEMO, _DEMO_RELATIONS, 12.0, 10.0),
 }

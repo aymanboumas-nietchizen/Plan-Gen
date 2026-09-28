@@ -174,6 +174,15 @@ def test_an_entree_wins_over_a_corridor():
     assert entry_space(fabric).nom == "SDB"
 
 
+def test_an_entree_away_from_the_street_is_no_way_in():
+    """2026-09-28. The F4 preset put its entree at the back of the flat and came
+    in through the corridor. A hall you do not enter by is a misnamed room."""
+    fabric = spine_flat()
+    fabric.spaces["Sejour"].kind = RoomType.ENTREE   # the back of the flat
+    with pytest.raises(ValueError, match="front door would open onto Couloir"):
+        entry_space(fabric)
+
+
 def test_a_plan_with_no_frontage_on_the_entry_edge_is_rejected():
     fabric = spine_flat()
     for space in fabric.spaces.values():

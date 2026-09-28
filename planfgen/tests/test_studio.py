@@ -366,10 +366,19 @@ def test_every_preset_generates_on_every_profile(key, profile_name):
 
 
 def test_the_studio_used_to_refuse_a_real_programme():
-    """The regression anchor. The F3 preset on its lot, built on the whole
-    parcel as the studio did until 2026-09-27: the band cannot absorb the slack,
-    every room overshoots together, and the area gate refuses every candidate."""
-    brief, graph = preset_brief("F3", P)
+    """The regression anchor. An agency F3 on a 9 x 11 m lot, built on the
+    whole parcel as the studio did until 2026-09-27: the band cannot absorb the
+    slack, every room overshoots together, and the area gate refuses every
+    candidate. Pinned here rather than read off `PRESETS`, which moves."""
+    rooms = [
+        ("Sejour", "SEJOUR", 24.0, "S"), ("Cuisine", "CUISINE", 9.0, "N"),
+        ("Ch1", "CHAMBRE_PRINCIPALE", 13.0, "S"), ("Ch2", "CHAMBRE", 11.0, "E"),
+        ("SDB", "SDB", 7.0, ""), ("Couloir", "COULOIR", 6.0, ""),
+    ]
+    brief, _ = studio_brief(rooms, 9.0, 11.0)
+    graph = ProgrammeGraph(
+        [Relation(a, b, RelationType[k], w) for a, b, k, w in PRESETS["DEMO"].relations]
+    )
     stats = RunStats()
     tree = studio_seed_tree(brief.programme)
 
@@ -417,7 +426,7 @@ def test_the_zoned_seed_puts_the_day_rooms_in_one_row_and_the_night_behind():
     brief, _ = preset_brief("F4", P)
     tree = zoned_tree(brief.programme)
     day, night = tree.root.children
-    assert sorted(leaf.nom for leaf in SlicingTree(day).leaves()) == ["Cuisine", "Sejour"]
+    assert sorted(leaf.nom for leaf in SlicingTree(day).leaves()) == ["Cuisine", "Entree", "Sejour"]
     assert isinstance(night, BandCut), "the corridor serves the night zone"
     assert seed_trees(brief.programme)[0] is not None
     assert len(seed_trees(brief.programme)) == 2
