@@ -167,7 +167,7 @@ class SlicingTree:
         return out
 
     def band_names(self, programme: Programme) -> list[str]:
-        """The circulation rooms available to name this tree's bands, in order.
+        """The corridor rooms available to name this tree's bands, in order.
 
         A circulation room already standing as a `Leaf` is a room, not a spine,
         and is not in the pool: taking its nom for a band would place the same
@@ -178,7 +178,7 @@ class SlicingTree:
         leaf_noms = {leaf.nom for leaf in self.leaves()}
         return [
             room.nom
-            for room in programme.circulation_rooms
+            for room in programme.band_rooms
             if room.nom not in leaf_noms
         ]
 
@@ -444,8 +444,9 @@ def _no_name_for_band(bands: int | None = None, names: int | None = None) -> str
     )
     return (
         f"the tree has more bands than it has spare circulation rooms to name "
-        f"them{counted}; add a COULOIR or ENTREE per band, and note that a "
-        f"circulation room standing as a Leaf is not available to name one"
+        f"them{counted}; add a COULOIR per band (an ENTREE is a hall and "
+        f"names none), and note that a circulation room standing as a Leaf is "
+        f"not available to name one"
     )
 
 

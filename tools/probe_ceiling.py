@@ -147,10 +147,10 @@ def seed_tree(programme: Programme) -> SlicingTree:
     `len(rooms) < 2`; that is a bug for `planfgen-product`, not one to reach in
     and fix from here.
     """
-    rooms = [r.nom for r in programme.rooms if not r.kind.is_circulation]
+    rooms = [r.nom for r in programme.rooms if not r.kind.names_band]
     half = max(1, len(rooms) // 2)
     halves = (_chain(rooms[:half]), _chain(rooms[half:]))
-    if programme.circulation_rooms:
+    if programme.band_rooms:
         return SlicingTree(BandCut(Direction.V, halves))
     return SlicingTree(Cut(Direction.V, False, halves))
 
@@ -189,7 +189,7 @@ def build(n: int, profile: RegulationProfile = MA_PROFILE) -> tuple[Brief, Slici
     # states no adjacency requirement, so it gets none, and `adjacences` returns
     # 1.0 by vacuity: the four-room `best` is therefore NOT comparable with the
     # rows below it on that term.
-    hub = next((room.nom for room in programme.circulation_rooms), None)
+    hub = next((room.nom for room in programme.band_rooms), None)
     graph = ProgrammeGraph(
         [
             Relation(hub, room.nom, RelationType.CONNECTED, 2.0)

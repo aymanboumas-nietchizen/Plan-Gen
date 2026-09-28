@@ -41,6 +41,22 @@ class RoomType(Enum):
         """
         return self in _CIRCULATION
 
+    @property
+    def names_band(self) -> bool:
+        """True for the one kind that may become a corridor band.
+
+        Circulation is two things. A COULOIR is a width: L2 cuts it as a band
+        and its area is an output. An ENTREE is a hall — somewhere to put a coat
+        and turn round, with a furniture spec and an area of its own — so it is
+        placed as a room. Both are passable (L5 walks through either without
+        calling it "through a room"), which is what `is_circulation` means.
+
+        Until 2026-09-28 both named bands, and ENTREE came first in any
+        programme that listed it: a 6 m2 hall became an 11 m corridor strip and
+        the COULOIR line vanished from the plan.
+        """
+        return self is RoomType.COULOIR
+
 
 _WET = frozenset({RoomType.CUISINE, RoomType.SDB, RoomType.WC})
 _CIRCULATION = frozenset({RoomType.COULOIR, RoomType.ENTREE})
@@ -116,8 +132,14 @@ class Programme:
 
     @property
     def circulation_rooms(self) -> list[RoomSpec]:
-        """The rooms whose area is an output rather than an input."""
+        """The passable rooms: corridors and halls. See `RoomType.names_band`
+        for which of them have an area that is an output."""
         return [r for r in self.rooms if r.kind.is_circulation]
+
+    @property
+    def band_rooms(self) -> list[RoomSpec]:
+        """The rooms that may name a corridor band. See `RoomType.names_band`."""
+        return [r for r in self.rooms if r.kind.names_band]
 
     @classmethod
     def from_json(cls, data: dict) -> Programme:

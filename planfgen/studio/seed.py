@@ -66,7 +66,7 @@ class SpineNote:
 
 def spine_note(programme: Programme, budget: AreaBudget) -> SpineNote:
     """What `seed_tree` will do with this programme, in French, before it does it."""
-    rooms = [r.nom for r in programme.rooms if not r.kind.is_circulation]
+    rooms = [r.nom for r in programme.rooms if not r.kind.names_band]
     if len(rooms) < MIN_ROOMS:
         return SpineNote(
             "refused",
@@ -75,8 +75,8 @@ def spine_note(programme: Programme, budget: AreaBudget) -> SpineNote:
             f"n'est pas une partition, c'est l'enveloppe. Rien n'est genere.",
         )
 
-    if programme.circulation_rooms:
-        noms = ", ".join(r.nom for r in programme.circulation_rooms)
+    if programme.band_rooms:
+        noms = ", ".join(r.nom for r in programme.band_rooms)
         return SpineNote(
             "band",
             f"Spine : bande de circulation nommee par {noms}. Sa largeur est une "
@@ -86,7 +86,7 @@ def spine_note(programme: Programme, budget: AreaBudget) -> SpineNote:
 
     return SpineNote(
         "open",
-        "Aucune piece de circulation : le plan sera coupe sans couloir, les "
+        "Aucun couloir : le plan sera coupe sans bande de circulation, les "
         "pieces ouvrant les unes sur les autres. C'est un plan reel (un F1 ou "
         "un F2 en a rarement un).",
     )
@@ -99,7 +99,7 @@ def seed_tree(programme: Programme) -> SlicingTree:
     output — only when the programme has a circulation room left to name it.
     Otherwise it is a plain `Cut` and the rooms open into one another.
     """
-    rooms = [r.nom for r in programme.rooms if not r.kind.is_circulation]
+    rooms = [r.nom for r in programme.rooms if not r.kind.names_band]
     if len(rooms) < MIN_ROOMS:
         raise ValueError(
             f"a plan needs at least {MIN_ROOMS} rooms beside the circulation; "
@@ -107,7 +107,7 @@ def seed_tree(programme: Programme) -> SlicingTree:
         )
     half = max(1, len(rooms) // 2)
     halves = (_chain(rooms[:half]), _chain(rooms[half:]))
-    if programme.circulation_rooms:
+    if programme.band_rooms:
         return SlicingTree(BandCut(Direction.V, halves))
     return SlicingTree(Cut(Direction.V, False, halves))
 

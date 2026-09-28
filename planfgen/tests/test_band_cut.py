@@ -288,7 +288,7 @@ def t_spine_plan():
             ("Ch1", RoomType.CHAMBRE, 16.0),
             ("Ch2", RoomType.CHAMBRE, 16.0),
             ("Couloir", RoomType.COULOIR, 7.0),
-            ("Entree", RoomType.ENTREE, 4.0),
+            ("Degagement", RoomType.COULOIR, 4.0),
         ],
         12.0,
         10.0,
@@ -305,7 +305,7 @@ def t_spine_plan():
 def test_a_nested_band_gives_two_corridors_that_meet():
     plan = t_spine_plan()
     bands = plan.circulation_cells
-    assert [c.nom for c in bands] == ["Couloir", "Entree"]
+    assert [c.nom for c in bands] == ["Couloir", "Degagement"]
     assert all(c.is_band for c in bands)
 
     assert shared_run(bands[0], bands[1]) > 0.0
@@ -413,18 +413,36 @@ def test_a_circulation_room_standing_as_a_leaf_is_not_a_name():
             ("Sejour", RoomType.SEJOUR, 26.0),
             ("Chambre", RoomType.CHAMBRE, 16.0),
             ("Couloir", RoomType.COULOIR, 7.0),
-            ("Entree", RoomType.ENTREE, 4.0),
+            ("Degagement", RoomType.COULOIR, 4.0),
         ],
         12.0,
         9.0,
     )
     spine = SlicingTree(BandCut(Direction.V, (Leaf("Sejour"), Leaf("Chambre"))))
-    assert spine.band_names(brief.programme) == ["Couloir", "Entree"]
+    assert spine.band_names(brief.programme) == ["Couloir", "Degagement"]
 
     with_couloir_placed = SlicingTree(
         BandCut(Direction.V, (Leaf("Sejour"), Leaf("Couloir")))
     )
-    assert with_couloir_placed.band_names(brief.programme) == ["Entree"]
+    assert with_couloir_placed.band_names(brief.programme) == ["Degagement"]
+
+
+def test_an_entree_is_a_hall_and_never_names_a_band():
+    """2026-09-28. ENTREE came first in any programme listing it and named the
+    band, so a 6 m2 hall became an 11 m corridor and COULOIR left the plan."""
+    brief = brief_for(
+        [
+            ("Entree", RoomType.ENTREE, 6.0),
+            ("Sejour", RoomType.SEJOUR, 26.0),
+            ("Chambre", RoomType.CHAMBRE, 16.0),
+            ("Couloir", RoomType.COULOIR, 7.0),
+        ],
+        12.0,
+        9.0,
+    )
+    spine = SlicingTree(BandCut(Direction.V, (Leaf("Sejour"), Leaf("Chambre"))))
+    assert spine.band_names(brief.programme) == ["Couloir"]
+    assert [r.nom for r in brief.programme.circulation_rooms] == ["Entree", "Couloir"]
 
 
 def test_an_unnameable_band_is_refused_before_any_geometry():

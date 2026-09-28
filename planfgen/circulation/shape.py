@@ -123,7 +123,10 @@ def circulation_runs(fabric: FabricPlan) -> CirculationReport:
     runs: list[Run] = []
 
     for nom, space in fabric.spaces.items():
-        if not space.kind.is_circulation:
+        # A hall is a room that happens to be passable, not a corridor: it has
+        # an area target and a furniture spec, and a front door at one end is
+        # not a run past its last door.
+        if not space.kind.names_band:
             continue
         axis, low, high, width = _axis(space)
         served = sorted(
