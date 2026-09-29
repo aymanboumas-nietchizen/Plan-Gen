@@ -1354,3 +1354,17 @@ Result:   plans/18: F3+WC 2->18, F3+WC+deg 0->18, F4+WC 0->6, F4+WC+deg 0->14, p
           probe_programmes 25->46/72. F2 unchanged (furniture-infeasible on sourced envelopes). Slots remain.
 Next:     planfgen-engine: search/construct.py, envelope follows the tree, seed generate from it — and make
           it fast (45-90 s on a failing brief). Routed: open corridor junction (two strict xfails pin both).
+
+---
+
+## S28 — Construction in the engine, envelope follows the tree, T-junctions, 73/83/93 doors  2026-09-29
+
+Built:    `search/construct.py` (S27 Finder as bitmasks + closed-form depth windows; unit rect and entry side are
+          parameters), `anneal.refit` (`follow=False` keeps a given envelope), `generate` anneals from `best_start`;
+          circulation<->circulation joins over `junction_module`, L6 `Passage` = DXF gap; per-kind door leaves (user).
+Measured: probe_programmes studio 25->50/72; presets 29->36/36; F3/F4 +WC (+deg) 2->48/48; F2 still 0 (geometric).
+          Construct 0.05-0.6 s/attempt (prototype 30-50 s); an unbuildable brief (F2) gives up in 1.3 s; refit
+          costs 1.3-3.3x per iteration. Per-kind doors alone: pass counts unchanged, a few fewer slots.
+Tests:    389 pass, 3 skip, 0 fail (earns_its_keep passes again). Both S27 xfails are now plain tests.
+Open:     presets unchanged: +WC generates 12/12 but F4+WC doubles probe_proportion slots; docstring stale
+          (planfgen-product). F4 cuisine 2.0x5.5 in every plan; F3 entree 1.5x3.3 in every plan — the objective's.
