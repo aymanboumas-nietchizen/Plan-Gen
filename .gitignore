@@ -30,3 +30,6 @@ references/raw/*
 # Images are client work too — a plan de situation names the site.
 /RESIDENCE ENNAKHIL/
 *.egg-info/
+
+# Isolated copies of the repo used by parallel agents; never part of the project.
+.claude/worktrees/
