@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from planfgen.fabric.axis import WallKind
 from planfgen.fabric.plan import FabricPlan, Space
 
 #: Coordinates closer than this are the same point.
@@ -92,26 +93,33 @@ def _axis(space: Space) -> tuple[int, float, float, float]:
 
 
 def _served_interval(
-    fabric: FabricPlan, space: Space, axis: int, door_module: float
+    fabric: FabricPlan, space: Space, axis: int
 ) -> tuple[float, float] | None:
-    """The stretch of the corridor's long axis that actually has doors on it.
+    """The stretch of the corridor's long axis that actually has openings on it.
 
     A room opens onto the corridor over the run they share; projected onto the
     corridor's own axis that run is an interval, and the union of those
     intervals is the part of the corridor doing any work.
+
+    A second corridor met end-on — a T-junction — projects to nothing on this
+    axis: the two net outlines are a wall apart. It is served where they meet,
+    which is the far end of this corridor, and counts as that point.
     """
+    # Two net outlines meeting end-on are one wall apart; never more than the
+    # thickest wall the profile builds.
+    end_on = max(fabric.profile.thickness_of(kind.value) for kind in WallKind)
     low = high = None
     for nom, other in fabric.spaces.items():
-        if other is space:
-            continue
-        if fabric.shared_wall_length(space.nom, nom) < door_module:
+        if other is space or not fabric.door_capable(space.nom, nom):
             continue
         start = max(space.net_polygon.bounds[axis], other.net_polygon.bounds[axis])
         stop = min(
             space.net_polygon.bounds[axis + 2], other.net_polygon.bounds[axis + 2]
         )
         if stop - start <= TOL:
-            continue
+            if start - stop > end_on + TOL:
+                continue
+            start = stop = (start + stop) / 2       # end-on: served where they meet
         low = start if low is None else min(low, start)
         high = stop if high is None else max(high, stop)
     return None if low is None else (low, high)
@@ -119,7 +127,6 @@ def _served_interval(
 
 def circulation_runs(fabric: FabricPlan) -> CirculationReport:
     """Measure every circulation space: what it serves, and what it wastes."""
-    door_module = fabric.profile.door_module
     runs: list[Run] = []
 
     for nom, space in fabric.spaces.items():
@@ -134,9 +141,9 @@ def circulation_runs(fabric: FabricPlan) -> CirculationReport:
             for other in fabric.spaces
             if other != nom
             and not fabric.spaces[other].kind.is_circulation
-            and fabric.shared_wall_length(nom, other) >= door_module
+            and fabric.door_capable(nom, other)
         )
-        interval = _served_interval(fabric, space, axis, door_module)
+        interval = _served_interval(fabric, space, axis)
         if interval is None:
             stub = high - low
         else:

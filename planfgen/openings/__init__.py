@@ -2,10 +2,11 @@
 
 An opening is an interval hosted on a wall. Both rules here are refusals: a door
 needs `door_module` metres of shared run, and a window needs an edge the parcel
-says may be pierced. What could not be placed is named in `OpeningReport.errors`.
+says may be pierced. Where two circulation spaces meet, the opening is a
+`Passage` — no leaf, no swing — over `junction_module`. What could not be placed is named in `OpeningReport.errors`.
 """
 
-from planfgen.openings.door import ENTRY_LEAF, Door, free_slot
+from planfgen.openings.door import ENTRY_LEAF, Door, Passage, free_slot
 from planfgen.openings.place import (
     OpeningReport,
     openable_walls,
@@ -26,6 +27,7 @@ __all__ = [
     "ENTRY_LEAF",
     "Door",
     "OpeningReport",
+    "Passage",
     "Window",
     "free_slot",
     "needs_daylight",

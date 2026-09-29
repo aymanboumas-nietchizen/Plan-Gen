@@ -18,6 +18,7 @@ import pytest
 
 from planfgen.brief.regulation import MA_CASABLANCA, MA_ECONOMIQUE
 from planfgen.evaluate.constraints import all_gates
+from planfgen.fabric.plan import junction_module
 from planfgen.partition import BandCut, Cut, Direction, Leaf, SlicingTree
 from planfgen.search import envelope_of, evaluate, grid_for
 from planfgen.studio.pipeline import attempts, fit
@@ -80,14 +81,80 @@ def test_a_degagement_can_be_accepted_on_the_search_footprint():
     assert evaluate(NESTED_F3, fitting.brief, grid_for(fitting.brief), None, 0) is not None
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "S27, routed: two corridors meeting are an opening, not a door. On the decret "
-    "a band's end is 0.80 + 0.10 = 0.90 m, under the 1.00 m door module, so a "
-    "degagement can never join its corridor and reachability refuses the plan."))
 def test_a_t_junction_joins_two_corridors_on_the_decret():
+    """Two corridors meeting are an opening, not a door. On the decret a band's
+    end is 0.80 + 0.10 = 0.90 m, under the 1.00 m door module; it joins over
+    `junction_module` (S28, approved by the user)."""
     brief = fit(_brief(MA_ECONOMIQUE), NESTED_F3).brief
     plan = NESTED_F3.realise(envelope_of(brief), brief, grid_for(brief))
     assert all_gates(plan, brief) == (True, None)
+
+
+def _decret_fabric():
+    brief = fit(_brief(MA_ECONOMIQUE), NESTED_F3).brief
+    plan = NESTED_F3.realise(envelope_of(brief), brief, grid_for(brief))
+    return plan.to_fabric(brief.profile), brief
+
+
+def test_the_junction_rule_is_for_circulation_only():
+    """A room still needs the whole door module: 0.90 m of wall joins the
+    degagement to its corridor and would join nothing else."""
+    fabric, brief = _decret_fabric()
+    profile = brief.profile
+    assert junction_module(profile) == pytest.approx(0.80)
+    run = fabric.shared_wall_length("Couloir", "Degagement")
+    assert profile.corridor_clear <= run < profile.door_module
+    assert fabric.door_capable("Couloir", "Degagement")
+    assert "Degagement" in fabric.adjacency_graph()["Couloir"]
+    for a in fabric.spaces:
+        for b in fabric.spaces:
+            if a != b and not fabric.is_passage(a, b) and fabric.door_capable(a, b):
+                assert fabric.shared_wall_length(a, b) >= profile.door_module - 1e-9
+
+
+def test_l6_opens_the_junction_with_no_leaf_and_draws_a_gap(tmp_path):
+    """The junction is a `Passage`: no door, no swing, a gap in the DXF wall."""
+    import ezdxf
+
+    from planfgen.document.dxf import export_dxf
+    from planfgen.openings import Passage, place_openings
+
+    fabric, brief = _decret_fabric()
+    graph = PROBE.graph_for(PROBE.CASES["F3wc+deg"][0])
+
+    class _Topology:
+        pass
+
+    topology = _Topology()
+    topology.graph = graph
+    report = place_openings(fabric, topology, brief.profile, brief.programme)
+    junction = [p for p in report.passages if set(p.between) == {"Couloir", "Degagement"}]
+    assert len(junction) == 1
+    passage = junction[0]
+    assert isinstance(passage, Passage)
+    assert passage.width == pytest.approx(brief.profile.corridor_clear)
+    low, high = passage.span
+    assert 0.0 <= low < high <= passage.wall.length + 1e-9
+    # no door leaf anywhere on that wall
+    assert not any(door.wall is passage.wall for door in report.doors)
+
+    path = tmp_path / "junction.dxf"
+    export_dxf(fabric, path, report)
+    doc = ezdxf.readfile(path)
+    wall = passage.wall
+    axis = 0 if wall.is_horizontal else 1
+    origin = min(wall.p0[axis], wall.p1[axis])
+    gap_lo, gap_hi = origin + low, origin + high
+    across = wall.p0[1 - axis]
+    solids = [e for e in doc.modelspace().query("LWPOLYLINE")]
+    for e in solids:
+        pts = [(p[0], p[1]) for p in e.get_points()]
+        along = [p[axis] for p in pts]
+        cross = [p[1 - axis] for p in pts]
+        if min(cross) - 1e-6 <= across <= max(cross) + 1e-6:
+            # no wall solid crossing this axis may cover the gap's middle
+            mid = (gap_lo + gap_hi) / 2
+            assert not (min(along) + 1e-6 < mid < max(along) - 1e-6), pts
 
 
 def test_the_constructive_probe_builds_a_separate_wc_plan():

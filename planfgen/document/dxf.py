@@ -206,7 +206,10 @@ def export_dxf(
     """Write the plan as DXF. Always `saveas`, never `save`."""
     doors = list(openings.doors) if openings else []
     windows = list(openings.windows) if openings else []
-    every_opening = doors + windows
+    # An open passage between two circulation spaces is a gap and nothing else:
+    # no leaf, no swing, so nothing is drawn in it.
+    passages = list(getattr(openings, "passages", ())) if openings else []
+    every_opening = doors + windows + passages
 
     doc = ezdxf.new("R2010", setup=True)
     doc.header["$INSUNITS"] = 6  # metres

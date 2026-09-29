@@ -70,8 +70,20 @@ def to_gh_json(fabric: FabricPlan, openings=None, shafts=None) -> dict:
     index = {id(wall): i for i, wall in enumerate(walls)}
     profile = fabric.profile
 
-    doors, windows = [], []
+    doors, windows, passages = [], [], []
     if openings is not None:
+        for passage in getattr(openings, "passages", ()):
+            low, high = passage.span
+            passages.append(
+                {
+                    "wall": index.get(id(passage.wall), -1),
+                    "t": round(passage.t, 6),
+                    "width": round(passage.width, PLACES),
+                    "between": list(passage.between),
+                    "span": [round(low, PLACES), round(high, PLACES)],
+                    "position": [round(v, PLACES) for v in passage.position()],
+                }
+            )
         for door in openings.doors:
             low, high = door.span
             doors.append(
@@ -126,7 +138,7 @@ def to_gh_json(fabric: FabricPlan, openings=None, shafts=None) -> dict:
             }
             for wall in walls
         ],
-        "openings": {"doors": doors, "windows": windows},
+        "openings": {"doors": doors, "windows": windows, "passages": passages},
         "shafts": [
             {
                 "x": round(shaft.x, PLACES),

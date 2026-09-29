@@ -53,6 +53,19 @@ def edge_run(
     return max(0.0, hi - lo)
 
 
+def junction_module(profile: RegulationProfile) -> float:
+    """Metres of shared wall over which two circulation spaces open onto each other.
+
+    A T-junction — a degagement meeting its corridor, a corridor meeting the
+    entree — is an open passage with no leaf and no swing, so the door module
+    does not apply to it. The band's end is `corridor_clear` plus its walls, so
+    the corridor's own clear width is what it has to offer; where that exceeds
+    a door module, the module is enough. Approved by the user, 2026-09-29
+    (PROGRESS.md S27, S28). Derived from the profile, not a constant of its own.
+    """
+    return min(profile.door_module, profile.corridor_clear)
+
+
 def _bbox_dims(polygon: Polygon) -> tuple[float, float]:
     minx, miny, maxx, maxy = polygon.bounds
     return maxx - minx, maxy - miny
@@ -102,13 +115,27 @@ class FabricPlan:
             self.spaces[a].axis_polygon, self.spaces[b].axis_polygon
         )
 
+    def opening_run(self, a: str, b: str) -> float:
+        """Metres of shared wall it takes to connect these two spaces.
+
+        A door leaf plus both jambs — except between two circulation spaces,
+        which open onto each other with no leaf at all (`junction_module`).
+        """
+        if self.spaces[a].kind.is_circulation and self.spaces[b].kind.is_circulation:
+            return junction_module(self.profile)
+        return self.profile.door_module
+
+    def is_passage(self, a: str, b: str) -> bool:
+        """True if a connection between these two is an open passage, not a door."""
+        return self.spaces[a].kind.is_circulation and self.spaces[b].kind.is_circulation
+
     def door_capable(self, a: str, b: str) -> bool:
-        """True if the shared run can host a door leaf plus both jambs.
+        """True if the shared run can host the opening between them.
 
         Contact is not access. ARCHITECTURE section 1 measured v1 reporting 7 of
         9 adjacencies where only 5 could take a door.
         """
-        return self.shared_wall_length(a, b) >= self.profile.door_module
+        return self.shared_wall_length(a, b) + TOL >= self.opening_run(a, b)
 
     def adjacency_graph(self) -> dict[str, list[str]]:
         """Every space mapped to the spaces one can actually reach from it."""

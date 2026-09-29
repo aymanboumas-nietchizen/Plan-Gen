@@ -86,7 +86,64 @@ class Door:
         )
 
 
-def free_slot(wall: WallAxis, taken: list[Door], leaf: float, jamb: float) -> float | None:
+#: Half the depth a passage claims either side of its wall's axis — only enough
+#: that a door leaf sweeping over the same stretch of wall is seen to clash.
+_ON_WALL = 1e-3
+
+
+@dataclass
+class Passage:
+    """An open passage: an interval of wall taken out, with no leaf and no swing.
+
+    Where two circulation spaces meet — a degagement at its corridor, a corridor
+    at the entree — nothing closes between them. The opening is still an
+    interval hosted on a wall, drawn as a gap in it, and it still claims its
+    stretch of wall so no door is placed over it. `t` is its centre along the
+    wall, from 0 at `p0` to 1 at `p1`, and `between` names the two spaces.
+    """
+
+    wall: WallAxis
+    t: float
+    width: float
+    between: tuple[str, str]
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.t <= 1.0:
+            raise ValueError(f"a passage sits along its wall, 0..1, not at {self.t}")
+        if self.width <= 0:
+            raise ValueError(f"width must be positive, got {self.width}")
+
+    @property
+    def span(self) -> tuple[float, float]:
+        """The interval the opening occupies along the wall, in metres."""
+        centre = self.t * self.wall.length
+        return (centre - self.width / 2, centre + self.width / 2)
+
+    def position(self) -> tuple[float, float]:
+        """The centre of the opening, in plan coordinates."""
+        (x0, y0), (x1, y1) = self.wall.p0, self.wall.p1
+        return (x0 + self.t * (x1 - x0), y0 + self.t * (y1 - y0))
+
+    def clearance_box(self) -> tuple[float, float, float, float]:
+        """Its stretch of wall, both faces: nothing swings, but nothing else
+        may be placed over it either."""
+        low, high = self.span
+        x0, y0 = self.wall.p0
+        if self.wall.is_horizontal:
+            return (x0 + low, y0 - _ON_WALL, x0 + high, y0 + _ON_WALL)
+        return (x0 - _ON_WALL, y0 + low, x0 + _ON_WALL, y0 + high)
+
+    def clashes_with(self, other) -> bool:
+        a, b = self.clearance_box(), other.clearance_box()
+        return not (
+            a[2] <= b[0] + 1e-9
+            or b[2] <= a[0] + 1e-9
+            or a[3] <= b[1] + 1e-9
+            or b[3] <= a[1] + 1e-9
+        )
+
+
+def free_slot(wall: WallAxis, taken: list, leaf: float, jamb: float) -> float | None:
     """A centre `t` on this wall where a leaf fits clear of the doors already on it.
 
     Walks the wall in jamb-sized steps rather than solving, because a wall

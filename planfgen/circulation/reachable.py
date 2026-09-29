@@ -2,7 +2,9 @@
 
 A gate, not a score. Two questions, both answered by breadth-first search over
 door-capable adjacency only — a run of shared wall shorter than the door module
-is not a way through, however close the two rooms come.
+is not a way through, however close the two rooms come. Two circulation spaces
+are the exception, and only to each other: a T-junction is an open passage with
+no leaf, so they join over `junction_module` (`FabricPlan.opening_run`).
 
 The second question is the one v1 could not ask. ARCHITECTURE section 1: on the
 seven-room fixture, Chambre 1's only door-capable neighbours were Chambre 2, the

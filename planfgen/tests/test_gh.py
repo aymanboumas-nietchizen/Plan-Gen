@@ -159,7 +159,7 @@ def test_shafts_and_the_parcel_come_across():
 
 def test_a_plan_with_no_openings_still_exports():
     document = to_gh_json(flat())
-    assert document["openings"] == {"doors": [], "windows": []}
+    assert document["openings"] == {"doors": [], "windows": [], "passages": []}
     assert document["shafts"] == []
 
 
