@@ -1,9 +1,10 @@
 """L6 — putting the openings on the walls, and saying what could not be done.
 
 Two rules govern everything here, and both are refusals rather than preferences.
-A door goes only where the shared run can host one — `door_module` metres of
-wall, a leaf plus a jamb each side — which is the measurement ARCHITECTURE
-section 1 says v1 never made. A window goes only where `parcel.openable(edge)`
+A door goes only where the shared run can host one — a leaf plus its frame each
+side, sized by the kind of room it serves (`door_module_for`: 0.83 m for a WC,
+1.03 m for a bedroom) — which is the measurement ARCHITECTURE section 1 says v1
+never made. A window goes only where `parcel.openable(edge)`
 allows, which is not a matter of degree.
 
 Anything that could not be placed comes back in `OpeningReport.errors`. A room
@@ -102,8 +103,10 @@ def place_doors(fabric: FabricPlan, topology, profile: RegulationProfile) -> Ope
             report.errors.append(f"{a}~{b}: {run:.2f} m shared but no single wall to host a door")
             continue
 
+        kind = fabric.door_kind(a, b)
+        leaf = profile.door_leaf_for(kind)
         taken = on_wall.setdefault(id(wall), [])
-        t = free_slot(wall, taken, profile.door_leaf, profile.door_jamb)
+        t = free_slot(wall, taken, leaf, profile.door_frame_for(kind))
         if t is None:
             report.errors.append(
                 f"{a}~{b}: no room left on that wall clear of the doors already on it"
@@ -113,7 +116,7 @@ def place_doors(fabric: FabricPlan, topology, profile: RegulationProfile) -> Ope
         door = Door(
             wall=wall,
             t=t,
-            leaf=profile.door_leaf,
+            leaf=leaf,
             swing_into=b,
             hinge="low",
             swing_side=_side_of(wall, fabric.spaces[b]),

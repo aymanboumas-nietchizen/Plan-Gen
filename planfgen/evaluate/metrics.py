@@ -106,7 +106,7 @@ def adjacences(plan, brief: Brief, graph: ProgrammeGraph) -> tuple[float, dict]:
 
         run = fabric.shared_wall_length(a, b)
         if relation.kind is RelationType.CONNECTED:
-            ok = run >= brief.profile.door_module
+            ok = fabric.door_capable(a, b)
         elif relation.kind is RelationType.ADJACENT:
             ok = run > 0.0
         elif relation.kind is RelationType.SEPARATED:

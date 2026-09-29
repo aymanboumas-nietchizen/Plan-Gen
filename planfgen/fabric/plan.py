@@ -118,12 +118,26 @@ class FabricPlan:
     def opening_run(self, a: str, b: str) -> float:
         """Metres of shared wall it takes to connect these two spaces.
 
-        A door leaf plus both jambs — except between two circulation spaces,
-        which open onto each other with no leaf at all (`junction_module`).
+        Between two circulation spaces, `junction_module`: they open onto each
+        other with no leaf at all. Otherwise the door into the room, leaf plus
+        frame, sized by the room's kind (`RegulationProfile.door_module_for`);
+        between two rooms, the larger of their two doors.
         """
-        if self.spaces[a].kind.is_circulation and self.spaces[b].kind.is_circulation:
+        ka, kb = self.spaces[a].kind, self.spaces[b].kind
+        if ka.is_circulation and kb.is_circulation:
             return junction_module(self.profile)
-        return self.profile.door_module
+        return self.profile.door_module_for(self.door_kind(a, b))
+
+    def door_kind(self, a: str, b: str):
+        """The kind whose door connects these two: the room's, off circulation;
+        between two rooms, the one needing the wider door."""
+        ka, kb = self.spaces[a].kind, self.spaces[b].kind
+        if ka.is_circulation:
+            return kb
+        if kb.is_circulation:
+            return ka
+        module = self.profile.door_module_for
+        return ka if module(ka) >= module(kb) else kb
 
     def is_passage(self, a: str, b: str) -> bool:
         """True if a connection between these two is an open passage, not a door."""

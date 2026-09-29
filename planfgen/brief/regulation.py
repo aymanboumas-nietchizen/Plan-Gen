@@ -40,6 +40,20 @@ _MIN_WIDTH: dict[RoomType, float] = {
     RoomType.COULOIR: 1.20,
 }
 
+#: Interior door LEAF widths by the kind of room the door serves, in m — the
+#: agency's "portes de 73 / 83 / 93". **Agency practice supplied by the user
+#: (the architect) on 2026-09-29, not a sourced regulation.** Kinds absent here
+#: keep the profile's `door_leaf` and `door_jamb`, i.e. today's `door_module`.
+_DOOR_LEAF_BY_KIND: dict[RoomType, float] = {
+    RoomType.SDB: 0.73,
+    RoomType.WC: 0.73,
+    RoomType.CUISINE: 0.83,
+    RoomType.CHAMBRE: 0.93,
+    RoomType.CHAMBRE_PRINCIPALE: 0.93,
+    RoomType.BUREAU: 0.93,
+    RoomType.SEJOUR: 0.93,
+}
+
 
 @dataclass(frozen=True)
 class RegulationProfile:
@@ -73,6 +87,13 @@ class RegulationProfile:
     coverage_max: float = 1.0
     min_area: dict[RoomType, float] = field(default_factory=lambda: dict(_MIN_AREA))
     min_width: dict[RoomType, float] = field(default_factory=lambda: dict(_MIN_WIDTH))
+    #: Per-kind interior leaves (see `_DOOR_LEAF_BY_KIND`) and the frame — the
+    #: huisserie — each side of one: 0.05 m, also agency practice (2026-09-29).
+    #: Not `door_jamb`, which still sizes the front door and window margins.
+    door_leaf_by_kind: dict[RoomType, float] = field(
+        default_factory=lambda: dict(_DOOR_LEAF_BY_KIND)
+    )
+    door_frame: float = 0.05
 
     @property
     def glazing_height(self) -> float:
@@ -107,6 +128,21 @@ class RegulationProfile:
         contact looks in a tolerance test.
         """
         return self.door_leaf + 2 * self.door_jamb
+
+    def door_leaf_for(self, kind: RoomType) -> float:
+        """The leaf of the door into a room of this kind."""
+        return self.door_leaf_by_kind.get(kind, self.door_leaf)
+
+    def door_frame_for(self, kind: RoomType) -> float:
+        """What stands each side of that leaf: the frame for a per-kind leaf,
+        else the profile's jamb, so an unlisted kind keeps `door_module`."""
+        return self.door_frame if kind in self.door_leaf_by_kind else self.door_jamb
+
+    def door_module_for(self, kind: RoomType) -> float:
+        """Metres of shared wall the door into a room of this kind needs:
+        0.83 for a WC or SDB, 0.93 for a kitchen, 1.03 for a bedroom, bureau
+        or sejour; `door_module` for any kind without a leaf of its own."""
+        return self.door_leaf_for(kind) + 2 * self.door_frame_for(kind)
 
 
 _WALL_ATTR = {

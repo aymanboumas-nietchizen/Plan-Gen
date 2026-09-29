@@ -211,7 +211,9 @@ def test_a_door_is_centred_on_the_run_it_shares():
     door = next(d for d in report.doors if d.swing_into == "SDB")
 
     low, high = door.span
-    assert high - low == pytest.approx(P.door_leaf, abs=1e-9)
+    # the leaf is the SDB's own, agency practice: a "porte de 73"
+    assert high - low == pytest.approx(P.door_leaf_for(RoomType.SDB), abs=1e-9)
+    assert high - low == pytest.approx(0.73, abs=1e-9)
     assert low >= 0 and high <= door.wall.length + 1e-9
 
 
@@ -231,7 +233,8 @@ def test_place_doors_refuses_a_sixty_three_centimetre_run_and_says_so():
 
     refused = [e for e in report.errors if e.startswith("Placard~Sejour")]
     assert len(refused) == 1
-    assert "0.63" in refused[0] and "1.00" in refused[0]
+    # between two rooms the wider door is asked for: the sejour's 0.93 + frames
+    assert "0.63" in refused[0] and "1.03" in refused[0]
     assert not any(d.swing_into == "Placard" for d in report.doors)
     assert any(d.swing_into == "Sejour" for d in report.doors), "the 5.37 m run is fine"
 
@@ -307,3 +310,45 @@ def test_place_openings_reports_doors_and_windows_together():
 def test_a_clean_report_says_so():
     assert OpeningReport().ok
     assert OpeningReport().explain() == "0 doors, 0 windows"
+
+
+# --- per-kind doors: agency practice, supplied by the user 2026-09-29 --------
+
+@pytest.mark.parametrize("kind, leaf, module", [
+    (RoomType.WC, 0.73, 0.83), (RoomType.SDB, 0.73, 0.83),
+    (RoomType.CUISINE, 0.83, 0.93),
+    (RoomType.CHAMBRE, 0.93, 1.03), (RoomType.CHAMBRE_PRINCIPALE, 0.93, 1.03),
+    (RoomType.BUREAU, 0.93, 1.03), (RoomType.SEJOUR, 0.93, 1.03),
+])
+def test_every_profile_sizes_the_door_by_the_room_it_serves(kind, leaf, module):
+    from planfgen.brief.regulation import PROFILES
+    for profile in PROFILES.values():
+        assert profile.door_leaf_for(kind) == pytest.approx(leaf)
+        assert profile.door_module_for(kind) == pytest.approx(module)
+
+
+def test_an_unlisted_kind_keeps_todays_door_and_the_front_door_is_unchanged():
+    from planfgen.brief.regulation import PROFILES
+    for profile in PROFILES.values():
+        for kind in (RoomType.CELLIER, RoomType.ENTREE, RoomType.TERRASSE):
+            assert profile.door_module_for(kind) == pytest.approx(profile.door_module)
+        assert profile.entry_leaf == pytest.approx(0.90)
+        assert profile.entry_module == pytest.approx(0.90 + 2 * profile.door_jamb)
+
+
+def test_door_capable_asks_for_the_rooms_own_door():
+    """Off circulation a WC needs 0.83 m, a bedroom 1.03 m; two circulation
+    spaces the junction; two rooms the wider of their doors."""
+    fabric = flat()
+    circ = next(n for n, s in fabric.spaces.items() if s.kind.is_circulation)
+    for nom, space in fabric.spaces.items():
+        if space.kind.is_circulation:
+            continue
+        assert fabric.opening_run(circ, nom) == pytest.approx(P.door_module_for(space.kind))
+        assert fabric.door_capable(circ, nom) == (
+            fabric.shared_wall_length(circ, nom) + 1e-9 >= P.door_module_for(space.kind))
+    rooms = [n for n, s in fabric.spaces.items() if not s.kind.is_circulation]
+    a, b = rooms[0], rooms[1]
+    ka, kb = fabric.spaces[a].kind, fabric.spaces[b].kind
+    assert fabric.opening_run(a, b) == pytest.approx(
+        max(P.door_module_for(ka), P.door_module_for(kb)))
