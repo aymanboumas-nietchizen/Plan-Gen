@@ -50,6 +50,28 @@ What this commits the code to now, before the plate exists:
 Anything that assumes "one unit = the whole building" is a bug against this
 section, even where it passes today's tests.
 
+### The output target: Revit, with the agency's families
+
+Decided by the user, 2026-09-29. The deliverable is a **Revit model built from
+the agency's own families**, not a DXF and not a Rhino file. The route:
+
+1. The engine exports a **neutral JSON building model**: levels, walls typed
+   (façade, porteur, cloison, wet) with thickness, rooms (nom, surface_utile,
+   net polygon), doors by kind (leaf 73/83/93), windows, passages, placards,
+   furniture, shafts, stairs. Every element carries a stable semantic
+   **family key** (`porte_interieure_83`, `lit_double_160x200`, `placard_60`…),
+   its type parameters, an insertion point, a rotation and its host.
+2. A **pyRevit** add-in inside Revit reads it and places the agency's families
+   through a **mapping table the agency controls** (family key → Revit family
+   and type). The engine never knows a Revit family name.
+3. The same route in reverse: the footprint, stair core and landing drawn in
+   Revit are exported to the engine as the skeleton of a floor plate.
+
+Consequences now: the family-key vocabulary is one documented table per
+element kind, and keys never change silently; the JSON model is the contract
+between the engine and Revit, versioned. IFC stays as a fallback (it imports as
+generic objects, not families); DXF and Grasshopper JSON stay secondary.
+
 ---
 
 ## 1. Why v1 produced a diagram

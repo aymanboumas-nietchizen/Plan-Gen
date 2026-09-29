@@ -10,6 +10,9 @@ a parcel and a regulation profile. Python 3.12 · Shapely · NetworkX · Streaml
 is one level of that hierarchy. Never hard-wire "one unit = the whole building";
 a unit is generated inside an envelope and entry side it is given.
 `ARCHITECTURE.md` §0 has the hierarchy and what it commits the code to.
+The deliverable is a **Revit model built from the agency's families** (via a
+JSON building model + a pyRevit add-in), not DXF or Rhino — every element the
+engine produces carries a stable family key. See `ARCHITECTURE.md` §0.
 
 ## The one rule that governs everything
 
