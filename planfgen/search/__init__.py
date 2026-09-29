@@ -14,7 +14,11 @@ from planfgen.search.anneal import (
     envelope_of,
     evaluate,
     grid_for,
+    refit,
 )
+# Not `construct` itself: a re-exported function would shadow the module, the
+# trap `anneal` already sets (import it from `planfgen.search.construct`).
+from planfgen.search.construct import Constructor, best_start
 from planfgen.search.moves import (
     BRIEF_MOVES,
     MOVES,
@@ -33,12 +37,14 @@ from planfgen.search.moves import (
 
 __all__ = [
     "BRIEF_MOVES",
+    "Constructor",
     "KEEP_BEST",
     "MOVES",
     "P_FOOTPRINT",
     "Result",
     "RunStats",
     "anneal",
+    "best_start",
     "envelope_of",
     "evaluate",
     "flip_cut",
@@ -46,6 +52,7 @@ __all__ = [
     "grid_for",
     "mutate",
     "mutate_brief",
+    "refit",
     "regroup",
     "remove_band",
     "rotate_band",

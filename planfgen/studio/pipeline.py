@@ -29,6 +29,7 @@ from planfgen.openings import place_openings
 from planfgen.openings.place import OpeningReport
 from planfgen.partition import SlicingTree
 from planfgen.search import Result, RunStats, anneal, grid_for
+from planfgen.search.construct import best_start
 from planfgen.services import assign_stack_ids, assign_wet_walls, place_shafts
 from planfgen.services.stacking import Level
 from planfgen.studio.seed import seed_trees
@@ -126,12 +127,16 @@ def generate(
 
     Tries `attempts` in order and keeps the first that finds a plan, so a lot
     between party walls is built wall to wall whenever that can be done at all.
-    Each attempt is a full run; a brief nothing can build costs one per attempt.
+    Each attempt first builds trees (`search.construct.best_start`: the
+    attempt's own seed against constructed ones, the best that passes every
+    gate) and anneals from the winner, or from the seed if none passes. Each
+    attempt is a full run; a brief nothing can build costs one per attempt.
     """
     stats = RunStats()
     fitting = None
     for tree, fitting in attempts(brief):
-        best = anneal(fitting.brief, tree, iterations, seed=seed, graph=graph, stats=stats)
+        start = best_start(fitting.brief, tree, graph, seed)
+        best = anneal(fitting.brief, start, iterations, seed=seed, graph=graph, stats=stats)
         if best:
             break
     else:

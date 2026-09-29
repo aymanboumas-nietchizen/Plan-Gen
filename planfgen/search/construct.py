@@ -110,10 +110,23 @@ class Constructor:
     that sibling the whole side. Both are carried down as `oblig`.
 
     Two circulation spaces join over `junction_module` of wall (a T-junction is
-    an open passage); a room needs the full `door_module`.
+    an open passage); a room needs its own door, `door_module_for(kind)`.
     """
 
-    def __init__(self, brief: Brief, rect: tuple[float, float, float, float]):
+    def __init__(
+        self,
+        brief: Brief,
+        rect: tuple[float, float, float, float],
+        entry_side: str | None = None,
+    ):
+        """`rect` is the unit's envelope on the wall axes and `entry_side` the
+        side of it the front door is on ("left", "right", "bottom", "top").
+
+        Both are parameters rather than read off the parcel because a unit is
+        not always the building: on a floor plate the envelope is set by the
+        plate and the front door opens off a landing, not the street. The
+        default is the single-flat case — the parcel's entry edge.
+        """
         prof = brief.profile
         programme = brief.programme
         self.rect = rect
@@ -144,9 +157,18 @@ class Constructor:
         self.windows = [depth_windows(a, k, SLACK) for a, k in zip(areas, kind)]
         self.area = areas
 
-        self.street = SIDES.index(brief.parcel.side_of(brief.parcel.entry_edge))
-        self.dm = prof.door_module
+        if entry_side is None:
+            entry_side = brief.parcel.side_of(brief.parcel.entry_edge)
+        self.street = SIDES.index(entry_side)
         self.jn = junction_module(prof)
+        # The run each room needs: off a band, its own door; off the hub, its
+        # own door if the hub is a hall, the wider of the two if it is a room.
+        hub_circ = hub is not None and kind[hub].is_circulation
+        own = [prof.door_module_for(k) for k in kind]
+        self.dm_band = own
+        self.dm_hall = [m if hub_circ or hub is None else max(m, own[hub]) for m in own]
+        # And what the hub needs to meet a floating band.
+        self.hub_meets = self.jn if hub_circ or hub is None else own[hub]
         self.t_cloison = prof.thickness_of(WallKind.CLOISON.value)
         self.t_band = prof.thickness_of(BAND_WALL.value)
         self.t_facade = prof.thickness_of(WallKind.FACADE.value)
@@ -210,10 +232,13 @@ class Constructor:
                 return False
             if oblig == FREE or oblig >= 4:
                 return True
-            return (h if oblig < 2 else w) >= self.jn - _EPS
-        dm = self.dm - _EPS
-        return ((flags[0] & CIRC and h >= dm) or (flags[1] & CIRC and h >= dm)
-                or (flags[2] & CIRC and w >= dm) or (flags[3] & CIRC and w >= dm))
+            return (h if oblig < 2 else w) >= self.hub_meets - _EPS
+        band, hall = self.dm_band[i] - _EPS, self.dm_hall[i] - _EPS
+        for side, f in enumerate(flags):
+            run = h if side < 2 else w
+            if (f & BAND and run >= band) or (f & HALL and run >= hall):
+                return True
+        return False
 
     def _plausible(self, mask: int, w: float, h: float, t, flags, budget: int, oblig: int) -> bool:
         nw = w - (t[0] + t[1]) / 2
@@ -297,7 +322,8 @@ class Constructor:
                 variants = []
                 if band:
                     ends = flags[e0] | flags[e1]
-                    if ends & CIRC and gap >= self.jn - _EPS:
+                    if ((ends & BAND and gap >= self.jn - _EPS)
+                            or (ends & HALL and gap >= self.hub_meets - _EPS)):
                         variants.append((BAND, BAND, inherited))
                     elif o_side is None and (h_low or h_high):
                         variants.append((BAND, BAND, (lo_s, FREE) if h_low else (FREE, hi_s)))
@@ -404,6 +430,7 @@ def construct(
     seed: int,
     tries: int = TRIES,
     max_calls: int = CALLS,
+    entry_side: str | None = None,
 ) -> list[SlicingTree]:
     """Distinct constructed trees for `brief` on `rect`, most bands first.
 
@@ -411,7 +438,7 @@ def construct(
     does not search again; a budget proven empty is skipped outright. The same
     seed always gives the same list.
     """
-    finder = Constructor(brief, rect)
+    finder = Constructor(brief, rect, entry_side)
     rng = random.Random(seed)
     bands = len(brief.programme.band_rooms)
     out: list[SlicingTree] = []
@@ -426,3 +453,37 @@ def construct(
             seen.add(tree)
             out.append(tree)
     return out
+
+
+def best_start(
+    brief: Brief,
+    tree0: SlicingTree,
+    graph=None,
+    seed: int = 0,
+    rect: tuple[float, float, float, float] | None = None,
+    entry_side: str | None = None,
+    tries: int = TRIES,
+    max_calls: int = CALLS,
+    follow: bool = True,
+) -> SlicingTree:
+    """The tree to anneal from: the best that passes every gate among `tree0`
+    and the trees `construct` builds on `rect`; `tree0` if none passes.
+
+    The seed competes too, so construction can never cost a plan. Each tree is
+    judged by `evaluate`, on a footprint solved for itself (`anneal.refit`);
+    ranking by `globale` is the search's own objective, and a tree that fails
+    a gate is not ranked at all. `rect` defaults to the brief's envelope;
+    `follow=False` judges every tree on it as given (a unit on a floor plate).
+    """
+    from planfgen.search.anneal import envelope_of, evaluate, grid_for
+
+    grid = grid_for(brief)
+    best = evaluate(tree0, brief, grid, graph, 0, follow)
+    rect = envelope_of(brief) if rect is None else rect
+    for tree in construct(brief, rect, seed, tries, max_calls, entry_side):
+        if tree == tree0:
+            continue
+        result = evaluate(tree, brief, grid, graph, 0, follow)
+        if result is not None and (best is None or result.cost < best.cost):
+            best = result
+    return tree0 if best is None else best.tree

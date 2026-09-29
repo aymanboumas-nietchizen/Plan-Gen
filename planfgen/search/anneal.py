@@ -208,13 +208,15 @@ def evaluate(
     grid: StructuralGrid,
     graph: ProgrammeGraph | None,
     iteration: int,
+    follow: bool = True,
 ) -> Result | None:
     """Refit, realise, gate, and score. `None` means the candidate was discarded.
 
     The footprint is re-solved for `tree` (`refit`), so the result's brief may
-    not be `brief`: read it off `Result.brief`.
+    not be `brief`: read it off `Result.brief`. `follow=False` keeps the
+    envelope as given — a unit on a floor plate, whose envelope the plate sets.
     """
-    return _assess(tree, brief, grid, graph, iteration, measure=False)[0]
+    return _assess(tree, brief, grid, graph, iteration, measure=False, follow=follow)[0]
 
 
 def _assess(
@@ -225,15 +227,17 @@ def _assess(
     iteration: int,
     measure: bool,
     fits: dict | None = None,
+    follow: bool = True,
 ) -> tuple[Result | None, str | None, float]:
     """One realise for everything the loop wants to know about a candidate.
 
     Returns the result (or None), the first gate that refused it, and — when
     `measure` — how far it is from passing. The distance is only asked for
     while nothing valid has been found; after that the gates alone decide.
-    The candidate is realised on its own footprint (`refit`; `fits` caches it).
+    The candidate is realised on its own footprint (`refit`; `fits` caches it)
+    unless `follow` is False.
     """
-    fitted = refit(tree, brief, fits)
+    fitted = refit(tree, brief, fits) if follow else brief
     if fitted is not brief:
         brief, grid = fitted, grid_for(fitted)
     try:
@@ -256,19 +260,22 @@ def anneal(
     seed: int = 0,
     graph: ProgrammeGraph | None = None,
     stats: RunStats | None = None,
+    follow: bool = True,
 ) -> list[Result]:
     """Anneal from `tree0` and return the best candidates seen, best first.
 
     The same seed always gives the same run. Temperature falls geometrically
     from `t0` to `t1`; a candidate that fails a gate is not a worse candidate
     but no candidate at all, so it is never accepted at any temperature.
+    Each candidate gets a footprint solved for itself (`refit`) unless
+    `follow` is False, which keeps the envelope it is given.
     """
     rng = random.Random(seed)
     stats = stats if stats is not None else RunStats()
 
     fits: dict = {}
     current, _, start_violation = _assess(
-        tree0, brief, grid_for(brief), graph, 0, measure=True, fits=fits
+        tree0, brief, grid_for(brief), graph, 0, measure=True, fits=fits, follow=follow
     )
     best: list[Result] = [current] if current else []
     if n_iter <= 0:
@@ -303,7 +310,7 @@ def anneal(
         stats.proposed += 1
         candidate, failure, distance = _assess(
             candidate_tree, candidate_brief, grid, graph, iteration,
-            measure=current is None, fits=fits,
+            measure=current is None, fits=fits, follow=follow,
         )
 
         if candidate is None:

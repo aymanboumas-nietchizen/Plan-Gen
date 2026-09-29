@@ -174,3 +174,29 @@ def test_the_constructive_probe_builds_a_separate_wc_plan():
         assert {c.nom for c in plan.cells if not c.is_band} == set(finder.rooms)
         valid += all_gates(plan, own)[0]
     assert valid, "no constructed tree passed every gate on its own footprint"
+
+
+def test_an_envelope_given_from_above_is_kept():
+    """`follow=False`: a unit on a floor plate is realised on the envelope it
+    is given — here the seed's, on which the degagement tree misses its areas."""
+    tree0, fitting = attempts(_brief(MA_CASABLANCA))[0]
+    assert evaluate(NESTED_F3, fitting.brief, grid_for(fitting.brief), None, 0,
+                    follow=False) is None
+
+
+def test_refit_keeps_the_footprint_where_the_tree_asks_for_its_size():
+    """Re-solving the seed's own tree lands on the seed's size, so the footprint
+    — and wherever a slide has put it — is kept as it stands."""
+    from dataclasses import replace
+
+    from planfgen.search import refit
+
+    tree0, fitting = attempts(_brief(MA_CASABLANCA))[0]
+    brief = fitting.brief
+    assert refit(tree0, brief) is brief
+    moved = replace(brief, footprint=replace(brief.footprint, y=brief.footprint.y + 0.3))
+    assert refit(tree0, moved) is moved
+    cache: dict = {}
+    other = refit(NESTED_F3, brief, cache)
+    assert other.footprint != brief.footprint
+    assert refit(NESTED_F3, brief, cache) == other and len(cache) == 1

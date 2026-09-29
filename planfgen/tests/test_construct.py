@@ -139,3 +139,36 @@ def test_a_hopeless_envelope_is_proven_empty_at_once():
     assert finder.find(random.Random(1), 1) is None
     assert finder.proven_empty(1)
     assert finder.calls < 50
+
+
+def test_best_start_prefers_a_constructed_tree_that_passes():
+    from planfgen.search.construct import best_start
+
+    brief = _case("F3wc", MA_CASABLANCA)
+    tree0, fitting = attempts(brief)[0]
+    grid = grid_for(fitting.brief)
+    assert evaluate(tree0, fitting.brief, grid, None, 0) is None   # the seed fails
+    start = best_start(fitting.brief, tree0, None, seed=1)
+    assert start != tree0
+    assert evaluate(start, fitting.brief, grid, None, 0) is not None
+
+
+def test_best_start_falls_back_to_the_seed_when_nothing_passes():
+    from planfgen.search.construct import best_start
+
+    brief = _case("F2", MA_ECONOMIQUE)
+    tree0, fitting = attempts(brief)[0]
+    assert best_start(fitting.brief, tree0, None, seed=1) == tree0
+
+
+@pytest.mark.parametrize("profile", [MA_ECONOMIQUE, MA_CASABLANCA])
+def test_the_studio_builds_an_f3_with_a_separate_wc(profile):
+    """Through `pipeline.generate`, as the studio runs it: 2 of 18 before S28."""
+    from planfgen.studio.pipeline import generate
+
+    rooms, width, depth = PROBE.CASES["F3wc"]
+    brief = PROBE.brief_for(rooms, width, depth, profile)
+    run = generate(brief, PROBE.graph_for(rooms), 1, 100)
+    assert run.ok
+    assert "WC" in {c.nom for c in run.result.plan.cells}
+    assert run.openings is not None
