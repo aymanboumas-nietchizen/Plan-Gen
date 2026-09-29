@@ -1380,3 +1380,16 @@ Tests:    test_web 33 pass (live uvicorn; `starlette.testclient` needs httpx2). 
           DXF/GH download, reload keeps all, stale banner. Streamlit studio untouched. Screens: web/docs/.
 Found:    F3 in 11x13 lot 0/6, in its 9x11 slot 3/6 -> units need slots; units stop 0.34 m short of a party
           wall; rooms without daylight pass every gate; shafts in facade thickness; exterior_chains use lot.
+
+---
+
+## S30 — Ranking valid plans: a lexi head and a Pareto gallery (planfgen-optima, no engine code)  2026-09-30
+
+Built:    `tools/probe_ranking.py` (records every valid candidate of generate's own search; front, linear reach,
+          rankers, `gallery`, slot-free Constructor, `--every/--lean/--prefer`); `test_ranking.py` 14 pass.
+Measured: 6 seeds x 3 profiles x F3/F4/DEMO/F3+WC. Top pick with a slot room (>2:1 net): today 81 %; lexi head
+          (wall to wall, fewest slots, then globale) on today's pool 58 %; on a pool fed by every attempt 42 %,
+          wall to wall kept 100 %, 2.0-3.6 s/run vs 1.6-2.3. ENTREE not judged: 57 % -> 25 %. F4 cuisine stays:
+          no wall-to-wall F4 without it was found; slot-free F4 is ~1.3 m off the party wall (gallery shows it).
+Theory:   pooled fronts are 16-38 % unsupported (no weighting reaches them); today's 1-3 plan fronts are convex.
+Next:     planfgen-engine: archive + lexi head + gallery in anneal/generate (spec in S30 report); ENTREE slot = architect's call.

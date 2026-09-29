@@ -155,7 +155,7 @@ def test_collect_is_deterministic_and_returns_what_generate_returns():
 
 
 def test_the_slot_free_constructor_reaches_plans_the_studio_never_returns():
-    """DEMO's returned plan has a slot room on every profile (S30 sweep), yet a
+    """DEMO's returned plan has a slot room in 11 of 18 runs (S30 sweep), yet a
     slot-free plan exists: the constrained construction builds it, and it
     passes every gate with every judged room within 2:1."""
     from planfgen.brief.regulation import MA_CASABLANCA
