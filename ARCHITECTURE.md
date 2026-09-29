@@ -5,6 +5,53 @@ carries the reasoning and the specifications behind them.
 
 ---
 
+## 0. The target: whole floors and whole buildings
+
+Decided by the user, 2026-09-29. PLANFGEN generates **buildings**: storeys of
+floor plates, each plate a stair core, a circulation commune and several flats
+between party walls, stacked R+n. A single flat is one level of that, not the
+product. Every layer, the search and the studio are designed for the hierarchy
+below even while only the lowest levels are built.
+
+| Level | Contains | Decided by | Status |
+|---|---|---|---|
+| Project | parcel, plan d'aménagement (CES, COS, height, reculs), unit mix | the brief | parcel only |
+| Building | envelope, storeys, structural grid, shafts that stack | L0 envelope + stacking | grid + shaft hooks (§7) |
+| Storey | RDC / étage courant / attique, each a floor plate | per storey | — |
+| Floor plate | core (stair, landing), circulation commune, courettes, unit envelopes | a plate-level slicing tree | — |
+| Unit | one flat: rooms, its own corridor, entry off the landing | L1–L7 as built today | built (S1–S27) |
+| Room | a face of the wall graph | L3 | built |
+
+What this commits the code to now, before the plate exists:
+
+1. **A unit is generated inside an envelope it is given.** Its entry side may be
+   an interior landing, not the street, and its neighbours may be other flats —
+   a wall between two flats behaves like MITOYEN: blind, and built up to. The
+   unit search takes envelope, entry side and openable sides as inputs; it does
+   not read them from the parcel deep inside the loop.
+2. **Sizing the footprint is separate from arranging the unit.** `fit_brief`
+   sizes a lone flat; on a plate the envelope comes from the plate.
+3. **The plate is the same idea one level up.** A slicing tree whose leaves are
+   unit envelopes, the core reserved before partition, and the circulation
+   commune a band whose doors are unit entries rather than room doors
+   (PROMPTS-NEXT S19). The same gates apply at their own scale: reachability
+   from the street to every unit door, coverage, daylight on openable edges.
+4. **Storeys align.** Structural cuts snap to one grid for the whole building
+   and shafts are positioned objects (§5, §7), so wet rooms stack and
+   `stack_conflicts()` can refuse a storey that does not.
+5. **Ranking composes upward.** Unit plans are kept as an archive of options,
+   not one winner, so a floor can choose the combination that shares a core,
+   stacks its wet rooms and meets the unit mix. Floor-level terms (surface
+   vendable over built area, circulation commune, stacking) exist only there.
+6. **The studio navigates the hierarchy.** Building → storey → unit, with a
+   gallery of options at each level, and a brief that is a building programme
+   (unit mix per storey) as well as a unit programme.
+
+Anything that assumes "one unit = the whole building" is a bug against this
+section, even where it passes today's tests.
+
+---
+
 ## 1. Why v1 produced a diagram
 
 v1 placed rectangles by graph-guided BFS, then `_voronoi_fill()` discarded them and

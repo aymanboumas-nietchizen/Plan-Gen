@@ -3,6 +3,14 @@
 Generates **architectural floor plans** (not bubble diagrams) from a programme,
 a parcel and a regulation profile. Python 3.12 · Shapely · NetworkX · Streamlit.
 
+## The target
+
+**Whole floors and whole buildings**, not single flats: storeys of floor plates
+(stair core, landing, several flats between party walls), stacked R+n. A flat
+is one level of that hierarchy. Never hard-wire "one unit = the whole building";
+a unit is generated inside an envelope and entry side it is given.
+`ARCHITECTURE.md` §0 has the hierarchy and what it commits the code to.
+
 ## The one rule that governs everything
 
 **Walls are authored. Spaces are derived.**
