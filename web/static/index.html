@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PLANFGEN — Studio</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><b>PLANFGEN</b><span>Studio</span></div>
+    <nav class="crumbs" id="crumbs"></nav>
+    <div class="status" id="status"></div>
+  </header>
+
+  <main class="layout">
+    <aside class="brief">
+      <!-- the project tree: always visible, the way back up -->
+      <nav class="tree" id="tree"></nav>
+
+      <!-- building level ---------------------------------------------------->
+      <div class="panel" data-level="building">
+        <section>
+          <h2>Projet</h2>
+          <label>Nom<input id="p-name"></label>
+          <label>Profil réglementaire<select id="p-profile"></select></label>
+        </section>
+        <section>
+          <h2>Parcelle</h2>
+          <div class="row3">
+            <label>Façade (m)<input id="p-width" type="number" step="0.1" min="3" max="200"></label>
+            <label>Profondeur (m)<input id="p-depth" type="number" step="0.1" min="3" max="200"></label>
+            <label>Nord (°)<input id="p-north" type="number" step="5" min="-360" max="360"></label>
+          </div>
+          <div class="edges" id="p-edges"></div>
+        </section>
+        <section>
+          <h2>Niveaux</h2>
+          <table class="rows" id="p-storeys"></table>
+          <button class="ghost small" id="add-storey" type="button">+ Niveau</button>
+        </section>
+        <section>
+          <h2>Logements types</h2>
+          <table class="rows" id="p-units"></table>
+          <div class="row2">
+            <select id="new-unit-typology"></select>
+            <button class="ghost small" id="add-unit" type="button">+ Logement type</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- storey level ------------------------------------------------------>
+      <div class="panel" data-level="storey">
+        <section>
+          <h2>Niveau</h2>
+          <label>Nom<input id="s-label"></label>
+          <div class="row2">
+            <label>Type<select id="s-kind"></select></label>
+            <label>Répété (niveaux)<input id="s-repeat" type="number" min="1" max="40" step="1"></label>
+          </div>
+        </section>
+        <section>
+          <h2>Plateau — logements</h2>
+          <table class="rows" id="s-slots"></table>
+          <div class="row2">
+            <select id="new-slot-unit"></select>
+            <button class="ghost small" id="add-slot" type="button">+ Placer</button>
+          </div>
+          <p class="hint" id="s-pending"></p>
+        </section>
+      </div>
+
+      <!-- unit level -------------------------------------------------------->
+      <div class="panel" data-level="unit">
+        <section>
+          <h2>Logement type</h2>
+          <div class="row2">
+            <label>Nom<input id="u-label"></label>
+            <label>Typologie<select id="u-typology"></select></label>
+          </div>
+          <div class="row2">
+            <label>Trame — façade (m)<input id="u-width" type="number" step="0.1" min="3" max="200"></label>
+            <label>Trame — profondeur (m)<input id="u-depth" type="number" step="0.1" min="3" max="200"></label>
+          </div>
+          <p class="hint" id="u-frame"></p>
+        </section>
+        <section>
+          <h2>Pièces <span class="total" id="total"></span></h2>
+          <table class="rooms">
+            <thead><tr><th>Nom</th><th>Type</th><th>m²</th><th>Orient.</th><th></th></tr></thead>
+            <tbody id="rooms"></tbody>
+          </table>
+          <button class="ghost small" id="add-room" type="button">+ Ajouter une pièce</button>
+          <p class="hint" id="relations"></p>
+        </section>
+        <section>
+          <h2>Faisabilité</h2>
+          <div id="check" class="check"></div>
+        </section>
+        <section class="go">
+          <div class="row2">
+            <label>Options<input id="count" type="number" min="1" max="12" step="1"></label>
+            <label>Effort
+              <select id="iterations">
+                <option value="200">Rapide</option>
+                <option value="500">Approfondi</option>
+                <option value="1000">Exhaustif</option>
+              </select>
+            </label>
+          </div>
+          <button class="primary" id="generate" type="button">Générer</button>
+          <button class="ghost" id="more" type="button">+ Plus d'options</button>
+        </section>
+      </div>
+    </aside>
+
+    <section class="work">
+      <!-- building view -->
+      <div class="view" data-level="building">
+        <div class="gallery-head"><h2 id="b-title">Immeuble</h2></div>
+        <div class="figures" id="b-figures"></div>
+        <div class="stack" id="b-stack"></div>
+        <div class="gallery-head"><h2>Niveaux</h2><span class="hint" id="b-plate-note"></span></div>
+        <div class="gallery wide" id="b-gallery"></div>
+      </div>
+
+      <!-- storey view -->
+      <div class="view" data-level="storey">
+        <div class="gallery-head"><h2 id="s-title">Niveau</h2></div>
+        <div class="plate-sheet" id="s-sheet"></div>
+        <div class="gallery-head"><h2>Logements du plateau</h2></div>
+        <div class="gallery" id="s-gallery"></div>
+      </div>
+
+      <!-- unit view -->
+      <div class="view" data-level="unit">
+        <div class="gallery-head">
+          <h2 id="gallery-title">Options</h2>
+          <div class="stale" id="stale" hidden>Le programme a changé depuis cette génération — les options affichées correspondent à l'ancien.</div>
+          <label class="sort"><input type="checkbox" id="sort"> Trier par note</label>
+        </div>
+        <div class="gallery" id="gallery"></div>
+        <div class="detail" id="detail" hidden>
+          <div class="sheet" id="sheet"></div>
+          <div class="side">
+            <div class="side-head">
+              <h2 id="detail-title"></h2>
+              <div class="downloads">
+                <button class="primary small" id="dl-dxf" type="button">DXF</button>
+                <button class="ghost small" id="dl-gh" type="button">Grasshopper JSON</button>
+              </div>
+            </div>
+            <div id="detail-scores" class="scores"></div>
+            <p class="note" id="detail-note"></p>
+            <ul class="warnings" id="detail-warnings"></ul>
+            <table class="table" id="detail-rooms"></table>
+            <p class="hint" id="detail-stats"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

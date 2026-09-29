@@ -1354,3 +1354,15 @@ Result:   plans/18: F3+WC 2->18, F3+WC+deg 0->18, F4+WC 0->6, F4+WC+deg 0->14, p
           probe_programmes 25->46/72. F2 unchanged (furniture-infeasible on sourced envelopes). Slots remain.
 Next:     planfgen-engine: search/construct.py, envelope follows the tree, seed generate from it — and make
           it fast (45-90 s on a failing brief). Routed: open corridor junction (two strict xfails pin both).
+
+---
+
+## S28 — Web studio: a building, its storeys, a gallery per flat type (planfgen-product)  2026-09-29
+
+Built:    `web/` — Starlette+uvicorn (already in [studio], zero new deps), no-build JS + SVG. `python -m web`.
+          Project JSON: building > storeys (plate = slots) > unit types (slot, rooms). Unit level generates
+          (spawn pool, one request per option); storey/building are arithmetic; `/api/storey/generate` = 501 (S19).
+Tests:    test_web 33 pass (live uvicorn; `starlette.testclient` needs httpx2). Chromium: 6 options in 7-9 s,
+          DXF/GH download, reload keeps all, stale banner. Streamlit studio untouched. Screens: web/docs/.
+Found:    F3 in 11x13 lot 0/6, in its 9x11 slot 3/6 -> units need slots; units stop 0.34 m short of a party
+          wall; rooms without daylight pass every gate; shafts in facade thickness; exterior_chains use lot.
