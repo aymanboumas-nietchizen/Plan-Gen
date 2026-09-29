@@ -33,3 +33,10 @@ references/raw/*
 
 # Isolated copies of the repo used by parallel agents; never part of the project.
 .claude/worktrees/
+
+# Revit files are agency work: only the exported family list (JSON) is committed.
+*.rte
+*.rvt
+*.rfa
+*.rft
+*.0001.rvt
