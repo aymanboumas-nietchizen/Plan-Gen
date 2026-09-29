@@ -1368,3 +1368,15 @@ Measured: probe_programmes studio 25->50/72; presets 29->36/36; F3/F4 +WC (+deg)
 Tests:    389 pass, 3 skip, 0 fail (earns_its_keep passes again). Both S27 xfails are now plain tests.
 Open:     presets unchanged: +WC generates 12/12 but F4+WC doubles probe_proportion slots; docstring stale
           (planfgen-product). F4 cuisine 2.0x5.5 in every plan; F3 entree 1.5x3.3 in every plan — the objective's.
+
+---
+
+## S29 — Web studio: a building, its storeys, a gallery per flat type (planfgen-product)  2026-09-29
+
+Built:    `web/` — Starlette+uvicorn (already in [studio], zero new deps), no-build JS + SVG. `python -m web`.
+          Project JSON: building > storeys (plate = slots) > unit types (slot, rooms). Unit level generates
+          (spawn pool, one request per option); storey/building are arithmetic; `/api/storey/generate` = 501 (S19).
+Tests:    test_web 33 pass (live uvicorn; `starlette.testclient` needs httpx2). Chromium: 6 options in 7-9 s,
+          DXF/GH download, reload keeps all, stale banner. Streamlit studio untouched. Screens: web/docs/.
+Found:    F3 in 11x13 lot 0/6, in its 9x11 slot 3/6 -> units need slots; units stop 0.34 m short of a party
+          wall; rooms without daylight pass every gate; shafts in facade thickness; exterior_chains use lot.
