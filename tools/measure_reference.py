@@ -73,7 +73,7 @@ ROOM_TYPES: tuple[tuple[re.Pattern, str], ...] = (
     (re.compile(r"couloir|d[ée]gagement|hall|palier|circulation", re.I), "COULOIR"),
     (re.compile(r"entr[ée]e|vestibule", re.I), "ENTREE"),
     (re.compile(r"bureau", re.I), "BUREAU"),
-    (re.compile(r"cellier|buanderie|d[ée]barras|rangement|placard", re.I), "CELLIER"),
+    (re.compile(r"cellier|buanderie|d[ée]barras|rangement|placard", re.I), "BUANDERIE"),
     (re.compile(r"terrasse|balcon|loggia|patio", re.I), "TERRASSE"),
 )
 

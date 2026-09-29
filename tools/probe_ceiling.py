@@ -108,11 +108,11 @@ CATALOG: list[tuple[str, str, float, str]] = [
     ("Ch2", "CHAMBRE", 13.0, "N"),
     ("WC", "WC", 2.0, "N"),
     ("Ch3", "CHAMBRE", 12.0, "E"),
-    ("Cellier", "CELLIER", 5.0, "N"),
+    ("Cellier", "BUANDERIE", 5.0, "N"),
     ("Ch4", "CHAMBRE", 12.0, "O"),
     ("Bureau", "BUREAU", 10.0, "E"),
     ("SDB2", "SDB", 5.0, "O"),
-    ("Buanderie", "CELLIER", 5.0, "N"),
+    ("Buanderie", "BUANDERIE", 5.0, "N"),
 ]
 
 #: How much bigger than the net demand the parcel is. Generous on purpose — the

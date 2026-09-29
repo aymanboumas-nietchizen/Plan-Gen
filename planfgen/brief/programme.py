@@ -24,8 +24,25 @@ class RoomType(Enum):
     COULOIR = "couloir"
     ENTREE = "entree"
     BUREAU = "bureau"
-    CELLIER = "cellier"
+    #: The laundry: washing machine, sink, somewhere to stand. Until 2026-09-29
+    #: this was CELLIER (a store); the architect made it a wet room, served
+    #: either beside the SDB or off the kitchen. "cellier" / "CELLIER" in an old
+    #: brief still load, as this kind (`from_name`, `_missing_`).
+    BUANDERIE = "buanderie"
     TERRASSE = "terrasse"
+
+    @classmethod
+    def _missing_(cls, value):
+        """`RoomType("cellier")` — an old brief's value — is the buanderie."""
+        if isinstance(value, str):
+            return cls.__members__.get(_ALIASES.get(value.upper(), ""))
+        return None
+
+    @classmethod
+    def from_name(cls, name: str) -> RoomType:
+        """The member called `name` ("CHAMBRE"), old names included: a brief
+        written before a rename must still load. Raises KeyError otherwise."""
+        return cls[_ALIASES.get(name, name)]
 
     @property
     def is_wet(self) -> bool:
@@ -58,7 +75,10 @@ class RoomType(Enum):
         return self is RoomType.COULOIR
 
 
-_WET = frozenset({RoomType.CUISINE, RoomType.SDB, RoomType.WC})
+_WET = frozenset({RoomType.CUISINE, RoomType.SDB, RoomType.WC, RoomType.BUANDERIE})
+
+#: Retired member names, and the kind each now loads as.
+_ALIASES = {"CELLIER": "BUANDERIE"}
 _CIRCULATION = frozenset({RoomType.COULOIR, RoomType.ENTREE})
 
 
@@ -104,7 +124,7 @@ class RoomSpec:
         pref = entry.get("orientation_pref")
         return cls(
             nom=entry["nom"],
-            kind=RoomType[entry["kind"]],
+            kind=RoomType.from_name(entry["kind"]),
             surface_utile=float(entry["surface_utile"]),
             couleur=entry["couleur"],
             daylight=bool(entry.get("daylight", True)),

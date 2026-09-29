@@ -34,7 +34,7 @@ PALETTE: dict[RoomType, str] = {
     RoomType.COULOIR: "#94a3b8",
     RoomType.ENTREE: "#94a3b8",
     RoomType.BUREAU: "#60a5fa",
-    RoomType.CELLIER: "#a3a3a3",
+    RoomType.BUANDERIE: "#a3a3a3",
     RoomType.TERRASSE: "#86efac",
 }
 

@@ -137,7 +137,7 @@ def stranded_flat():
         ],
         rooms=[
             ("Couloir", RoomType.COULOIR, 10.0),
-            ("Cellier", RoomType.CELLIER, 1.0),
+            ("Cellier", RoomType.BUANDERIE, 1.0),
             ("WC", RoomType.WC, 5.0),
             ("Sejour", RoomType.SEJOUR, 50.0),
         ],
