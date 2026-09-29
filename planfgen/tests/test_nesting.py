@@ -71,11 +71,10 @@ def test_a_separate_wc_f3_with_a_degagement_exists():
     assert min(wc.net_dims(brief.profile)) >= 0.90
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "S27 spec for planfgen-engine: the envelope must follow the tree. The search "
-    "realises every candidate on the SEED's footprint, so a tree with more "
-    "corridor than the seed misses its areas by 4.5-9 % against a 5 % gate."))
 def test_a_degagement_can_be_accepted_on_the_search_footprint():
+    """The envelope follows the tree (S28): a tree with more corridor than the
+    seed is realised on a footprint solved for itself, not on the seed's —
+    where it missed its areas by 4.5-9 % against a 5 % gate."""
     tree0, fitting = attempts(_brief(MA_CASABLANCA))[0]
     assert len(tree0.bands()) == 1
     assert evaluate(NESTED_F3, fitting.brief, grid_for(fitting.brief), None, 0) is not None

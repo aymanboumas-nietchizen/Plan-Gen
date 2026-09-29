@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
-from planfgen.brief.footprint import Footprint
-from planfgen.brief.plan import Brief
+from planfgen.brief.footprint import Footprint, fit_footprint, party_span, place_footprint
+from planfgen.brief.plan import Brief, InfeasibleBrief
 from planfgen.evaluate.constraints import UNREALISABLE, all_gates, violation
 from planfgen.evaluate.metrics import Scores, score
 from planfgen.partition.grid import StructuralGrid
@@ -144,6 +144,64 @@ def _footprint_of(brief: Brief) -> Footprint:
     return brief.footprint or Footprint.of_parcel(brief.parcel)
 
 
+#: Two footprints whose sides agree to this, in m, are the same building: the
+#: re-solve for a tree keeps the current one, and with it wherever
+#: `slide_footprint` put it.
+SAME_SIZE = 1e-4
+
+
+def refit(tree: SlicingTree, brief: Brief, cache: dict | None = None) -> Brief:
+    """The envelope follows the tree: `brief` with its footprint re-solved for `tree`.
+
+    A band's area is an output, so a tree with more (or longer) corridor than
+    the one the footprint was solved for steals it from the rooms: on the
+    F3/F4 seed footprints every two-band tree missed its areas by 4.5-9 %
+    against a 5 % gate, and no degagement could ever be accepted (S27). So
+    each candidate is realised on a footprint solved for itself — spanning the
+    party walls if the current one does, else at the current proportion — and
+    placed by `place_footprint`. Where the solve lands on the current size, the
+    current footprint is kept as it stands.
+
+    A brief with no footprint builds on its parcel and is returned as is; so is
+    one the tree cannot be fitted to (the gates then judge it as it stands).
+    `cache` maps (tree, proportion) to the solve, so a tree revisited costs
+    nothing; `fit_footprint` realises the tree several times.
+    """
+    footprint = brief.footprint
+    if footprint is None:
+        return brief
+    span_w, span_d = party_span(brief.parcel)
+    spans = (span_w is not None and abs(footprint.w - span_w) <= SAME_SIZE) or (
+        span_d is not None and abs(footprint.h - span_d) <= SAME_SIZE
+    )
+    aspect = None if spans else footprint.aspect
+    key = (tree, None if aspect is None else round(aspect, 9))
+    if cache is not None and key in cache:
+        solved = cache[key]
+    else:
+        solved = _solve(tree, brief, aspect)
+        if cache is not None:
+            cache[key] = solved
+    if solved is None:
+        return brief
+    size, placed = solved
+    if abs(size.w - footprint.w) <= SAME_SIZE and abs(size.h - footprint.h) <= SAME_SIZE:
+        return brief
+    return replace(brief, footprint=placed)
+
+
+def _solve(
+    tree: SlicingTree, brief: Brief, aspect: float | None
+) -> tuple[Footprint, Footprint] | None:
+    """(solved size, where it stands), or None if the tree cannot be fitted."""
+    try:
+        solved = fit_footprint(brief.programme, brief.parcel, brief.profile, tree, aspect)
+    except (ValueError, InfeasibleBrief):
+        return None
+    placed = place_footprint(solved, brief.parcel)
+    return solved, placed if placed.buildable(brief.parcel) else solved
+
+
 def evaluate(
     tree: SlicingTree,
     brief: Brief,
@@ -151,7 +209,11 @@ def evaluate(
     graph: ProgrammeGraph | None,
     iteration: int,
 ) -> Result | None:
-    """Realise, gate, and score. `None` means the candidate was discarded."""
+    """Refit, realise, gate, and score. `None` means the candidate was discarded.
+
+    The footprint is re-solved for `tree` (`refit`), so the result's brief may
+    not be `brief`: read it off `Result.brief`.
+    """
     return _assess(tree, brief, grid, graph, iteration, measure=False)[0]
 
 
@@ -162,13 +224,18 @@ def _assess(
     graph: ProgrammeGraph | None,
     iteration: int,
     measure: bool,
+    fits: dict | None = None,
 ) -> tuple[Result | None, str | None, float]:
     """One realise for everything the loop wants to know about a candidate.
 
     Returns the result (or None), the first gate that refused it, and — when
     `measure` — how far it is from passing. The distance is only asked for
     while nothing valid has been found; after that the gates alone decide.
+    The candidate is realised on its own footprint (`refit`; `fits` caches it).
     """
+    fitted = refit(tree, brief, fits)
+    if fitted is not brief:
+        brief, grid = fitted, grid_for(fitted)
     try:
         plan = tree.realise(envelope_of(brief), brief, grid)
     except ValueError:
@@ -199,8 +266,9 @@ def anneal(
     rng = random.Random(seed)
     stats = stats if stats is not None else RunStats()
 
+    fits: dict = {}
     current, _, start_violation = _assess(
-        tree0, brief, grid_for(brief), graph, 0, measure=True
+        tree0, brief, grid_for(brief), graph, 0, measure=True, fits=fits
     )
     best: list[Result] = [current] if current else []
     if n_iter <= 0:
@@ -235,7 +303,7 @@ def anneal(
         stats.proposed += 1
         candidate, failure, distance = _assess(
             candidate_tree, candidate_brief, grid, graph, iteration,
-            measure=current is None,
+            measure=current is None, fits=fits,
         )
 
         if candidate is None:

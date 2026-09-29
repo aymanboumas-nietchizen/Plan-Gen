@@ -163,13 +163,20 @@ class Parcel:
         Where two edges fall on the same side — which a rectilinear outline
         does — the one demanding the larger setback wins, since both have to be
         honoured.
+
+        Read once and kept: a parcel is frozen, and the footprint solve asks for
+        this on every step of every candidate (S28 measured it at a sixth of a
+        search's time, all of it Shapely coordinate access).
         """
-        out: dict[str, EdgeSpec] = {}
-        for spec in self.edges:
-            side = self.side_of(spec.index)
-            if side not in out or spec.setback > out[side].setback:
-                out[side] = spec
-        return out
+        cached = self.__dict__.get("_sides")
+        if cached is None:
+            cached = {}
+            for spec in self.edges:
+                side = self.side_of(spec.index)
+                if side not in cached or spec.setback > cached[side].setback:
+                    cached[side] = spec
+            object.__setattr__(self, "_sides", cached)
+        return dict(cached)
 
     def buildable_bounds(self) -> tuple[float, float, float, float]:
         """(minx, miny, maxx, maxy) of what may be built on, after setbacks.
