@@ -27,6 +27,12 @@ from planfgen.fabric.plan import FabricPlan
 #: requirement: a real plumbing duct is sized from the stack it carries.
 SHAFT_SIDE = 0.30
 
+#: How far from a wall's axis a shaft's centre may be and still count as on it.
+#: A shaft sits inside its room against the wall's face, so its centre is half
+#: the wall plus half the shaft from the axis: 0.30 m against a 0.30 m facade.
+#: The slack is a little more than that, so the test is not decided by rounding.
+ON_WALL_SLACK = SHAFT_SIDE + 0.05
+
 
 class ShaftType(Enum):
     """What runs up it."""
@@ -55,7 +61,7 @@ class Shaft:
     def centre(self) -> tuple[float, float]:
         return (self.x + self.w / 2, self.y + self.h / 2)
 
-    def on_wall(self, wall: WallAxis, slack: float = SHAFT_SIDE) -> bool:
+    def on_wall(self, wall: WallAxis, slack: float = ON_WALL_SLACK) -> bool:
         """True if this shaft sits on that wall's run."""
         cx, cy = self.centre
         (x0, y0), (x1, y1) = wall.p0, wall.p1
@@ -91,16 +97,19 @@ def wet_clusters(fabric: FabricPlan) -> list[list[str]]:
     return clusters
 
 
-def _shared_wall(fabric: FabricPlan, cluster: list[str]) -> WallAxis | None:
-    """The longest wall two rooms of the cluster hold in common."""
-    best: WallAxis | None = None
+def _shared_wall(
+    fabric: FabricPlan, cluster: list[str]
+) -> tuple[WallAxis, str] | None:
+    """The longest wall two rooms of the cluster hold in common, and the first
+    of those two rooms in cluster order — the one the duct is built in."""
+    best: tuple[WallAxis, str] | None = None
     for i, a in enumerate(cluster):
         for b in cluster[i + 1 :]:
             wall = fabric.graph.wall_between(
                 fabric.spaces[a].axis_polygon, fabric.spaces[b].axis_polygon
             )
-            if wall is not None and (best is None or wall.length > best.length):
-                best = wall
+            if wall is not None and (best is None or wall.length > best[0].length):
+                best = (wall, a)
     return best
 
 
@@ -129,10 +138,25 @@ def _least_used_wall(fabric: FabricPlan, nom: str) -> WallAxis:
     return min(sorted(space.bounding, key=lambda w: (w.p0, w.p1)), key=use)
 
 
-def _shaft_on(wall: WallAxis, kind: ShaftType) -> Shaft:
-    """A square duct straddling the wall at its midpoint."""
+def _shaft_on(
+    wall: WallAxis, kind: ShaftType, room, profile: RegulationProfile
+) -> Shaft:
+    """A square duct inside `room`, flush against the wall's face, at its midpoint.
+
+    It used to straddle the wall's axis, which put half a duct inside the wall
+    and, on a facade or party wall, half of it outside the building (found by
+    planfgen-product on the web studio's F4, 2026-09-29). A gaine is built in
+    the room it serves, against the wall: the centre moves off the axis by half
+    the wall's thickness plus half the duct, towards the room.
+    """
     cx = (wall.p0[0] + wall.p1[0]) / 2
     cy = (wall.p0[1] + wall.p1[1]) / 2
+    offset = profile.thickness_of(wall.kind.value) / 2 + SHAFT_SIDE / 2
+    rx, ry = room.axis_polygon.centroid.coords[0]
+    if wall.is_horizontal:
+        cy += offset if ry > cy else -offset
+    else:
+        cx += offset if rx > cx else -offset
     half = SHAFT_SIDE / 2
     return Shaft(cx - half, cy - half, SHAFT_SIDE, SHAFT_SIDE, kind)
 
@@ -145,8 +169,10 @@ def place_shafts(fabric: FabricPlan, profile: RegulationProfile) -> list[Shaft]:
     """
     shafts: list[Shaft] = []
     for cluster in wet_clusters(fabric):
-        wall = _shared_wall(fabric, cluster)
-        if wall is None:
-            wall = _least_used_wall(fabric, cluster[0])
-        shafts.append(_shaft_on(wall, ShaftType.PLUMBING))
+        shared = _shared_wall(fabric, cluster)
+        if shared is not None:
+            wall, nom = shared
+        else:
+            wall, nom = _least_used_wall(fabric, cluster[0]), cluster[0]
+        shafts.append(_shaft_on(wall, ShaftType.PLUMBING, fabric.spaces[nom], profile))
     return shafts

@@ -126,7 +126,12 @@ def test_a_paired_cluster_puts_its_shaft_on_the_wall_the_two_rooms_share():
     shaft = next(s for s in place_shafts(fabric, P) if s.on_wall(shared))
 
     assert shaft.on_wall(shared)
-    assert shaft.centre == pytest.approx((9.15, 1.25), abs=1e-9)
+    # Inside one of the two rooms, flush with the wall: off the axis by half
+    # the wall plus half the duct (it straddled the axis until 2026-09-29).
+    x0 = shared.p0[0]
+    offset = P.thickness_of(shared.kind.value) / 2 + SHAFT_SIDE / 2
+    assert abs(shaft.centre[0] - x0) == pytest.approx(offset, abs=1e-9)
+    assert shaft.centre[1] == pytest.approx(1.25, abs=1e-9)
     for nom in ("SDB", "WC"):
         assert any(shaft.on_wall(w) for w in fabric.spaces[nom].bounding)
 
@@ -315,3 +320,20 @@ def test_a_partition_moving_between_levels_is_not_a_conflict():
         if wall.kind is WallKind.CLOISON:
             wall.kind = WallKind.WET
     assert stack_conflicts(ground, upper) == []
+
+
+def test_every_shaft_is_inside_a_wet_room_not_in_a_wall_or_outside():
+    """2026-09-29: the duct straddled its wall's axis, so on a facade or party
+    wall half of it stood outside the building. It is built in the room now."""
+    fabric = flat()
+    for shaft in place_shafts(fabric, P):
+        box = (shaft.x, shaft.y, shaft.x + shaft.w, shaft.y + shaft.h)
+        inside = [
+            nom for nom, space in fabric.spaces.items()
+            if space.kind.is_wet
+            and space.net_polygon.bounds[0] - 1e-9 <= box[0]
+            and space.net_polygon.bounds[1] - 1e-9 <= box[1]
+            and box[2] <= space.net_polygon.bounds[2] + 1e-9
+            and box[3] <= space.net_polygon.bounds[3] + 1e-9
+        ]
+        assert inside, f"shaft at {box} is not inside any wet room's net area"
