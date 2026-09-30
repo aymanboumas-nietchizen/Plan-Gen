@@ -25,7 +25,7 @@ against a growing programme, the ceiling on how many rooms the search can place
 went: unbounded 11, at 4.0 ten, at 3.5 and 3.0 eight, at 2.5 six. The first
 values tried here were 2.0 to 2.5 per room type, and they cost five rooms of
 capacity to catch a fault that 3.0 catches too — the WC above is 5.62:1 and the
-cellier beside it 3.21:1, and both are refused at 3.0.
+cellier (now buanderie) beside it 3.21:1, and both are refused at 3.0.
 
 This is a furniture constraint, not the aspect rule S9b took out of the gates.
 CLAUDE.md lists compactness among the scored judgement calls and furniture fit
@@ -72,8 +72,13 @@ FURNITURE: dict[RoomType, FurnitureSpec] = {
         1.70, 1.90, "bath or shower, basin, and a standing zone", max_ratio=ARRANGEABLE),
     RoomType.WC: FurnitureSpec(
         0.90, 1.40, "pan plus the approach in front of it", max_ratio=ARRANGEABLE),
-    RoomType.CELLIER: FurnitureSpec(
-        1.20, 1.60, "shelving one side and room to stand", max_ratio=ARRANGEABLE),
+    # Was CELLIER (shelving and room to stand); the same rectangle holds a
+    # laundry: washing machine and sink side by side on the 1.60 m wall (2 x 0.60),
+    # 0.60 m deep, and 0.60 m to stand in front. Tight — 0.90 m of standing is
+    # the comfortable figure — and a number for planfgen-regs, not changed here.
+    RoomType.BUANDERIE: FurnitureSpec(
+        1.20, 1.60, "washing machine and sink side by side, and room to stand",
+        max_ratio=ARRANGEABLE),
     RoomType.BUREAU: FurnitureSpec(
         2.10, 2.60, "desk, chair pulled back, and shelving", max_ratio=ARRANGEABLE),
     RoomType.ENTREE: FurnitureSpec(

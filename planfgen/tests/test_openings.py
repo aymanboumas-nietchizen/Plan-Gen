@@ -72,7 +72,7 @@ def cell(nom, x, y, w, h, left, right, bottom, top) -> SpaceCell:
 def shelf_flat():
     """A placard 0.63 m tall: real contact with the sejour, no way through it."""
     rooms = [
-        ("Placard", RoomType.CELLIER, 1.8),
+        ("Placard", RoomType.BUANDERIE, 1.8),
         ("Chambre", RoomType.CHAMBRE, 15.0),
         ("Sejour", RoomType.SEJOUR, 28.0),
     ]
@@ -319,6 +319,8 @@ def test_a_clean_report_says_so():
     (RoomType.CUISINE, 0.83, 0.93),
     (RoomType.CHAMBRE, 0.93, 1.03), (RoomType.CHAMBRE_PRINCIPALE, 0.93, 1.03),
     (RoomType.BUREAU, 0.93, 1.03), (RoomType.SEJOUR, 0.93, 1.03),
+    # 2026-09-29, the user: the laundry takes 83, the hall keeps its 1.00 m
+    (RoomType.BUANDERIE, 0.83, 0.93), (RoomType.ENTREE, 0.90, 1.00),
 ])
 def test_every_profile_sizes_the_door_by_the_room_it_serves(kind, leaf, module):
     from planfgen.brief.regulation import PROFILES
@@ -330,8 +332,10 @@ def test_every_profile_sizes_the_door_by_the_room_it_serves(kind, leaf, module):
 def test_an_unlisted_kind_keeps_todays_door_and_the_front_door_is_unchanged():
     from planfgen.brief.regulation import PROFILES
     for profile in PROFILES.values():
-        for kind in (RoomType.CELLIER, RoomType.ENTREE, RoomType.TERRASSE):
+        for kind in (RoomType.TERRASSE, RoomType.COULOIR):
             assert profile.door_module_for(kind) == pytest.approx(profile.door_module)
+        # the ENTREE is listed now, and its opening did not move
+        assert profile.door_module_for(RoomType.ENTREE) == pytest.approx(profile.door_module)
         assert profile.entry_leaf == pytest.approx(0.90)
         assert profile.entry_module == pytest.approx(0.90 + 2 * profile.door_jamb)
 

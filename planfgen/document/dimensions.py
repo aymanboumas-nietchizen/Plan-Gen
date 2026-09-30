@@ -55,15 +55,40 @@ def _merge(values: list[float]) -> list[float]:
     return out
 
 
+def building_extent(fabric: FabricPlan) -> tuple[float, float, float, float]:
+    """(minx, miny, maxx, maxy) of the building, to the outside of its facades.
+
+    Not the parcel's bounds. Those were the same thing until the footprint was
+    fitted to the programme (S14); since then a building stands inside its lot,
+    and chains drawn to the lot's edges dimensioned land, not building — found
+    by planfgen-product on the web studio, 2026-09-29. The extent is the ring of
+    wall axes plus half the facade, the face a builder measures to.
+    """
+    xs = [c for wall in fabric.graph.walls for c in (wall.p0[0], wall.p1[0])]
+    ys = [c for wall in fabric.graph.walls for c in (wall.p0[1], wall.p1[1])]
+    if not xs:
+        return fabric.parcel.outline.bounds
+    half = fabric.profile.facade_t / 2
+    # Clamped to the lot: a building never stands outside it, and a plan whose
+    # facade axes were drawn on the boundary itself must not read 0.15 m beyond.
+    lminx, lminy, lmaxx, lmaxy = fabric.parcel.outline.bounds
+    return (
+        max(min(xs) - half, lminx),
+        max(min(ys) - half, lminy),
+        min(max(xs) + half, lmaxx),
+        min(max(ys) + half, lmaxy),
+    )
+
+
 def exterior_chains(fabric: FabricPlan) -> list[DimensionChain]:
-    """One chain outside each side of the parcel.
+    """One chain outside each side of the building.
 
     The ticks on a side are the walls that actually meet it, so the bottom chain
     reads the bays along the street and the top chain reads whatever the plan
     does at the back — which is usually not the same thing, and a drawing that
     showed only one of them would be hiding half the plan.
     """
-    minx, miny, maxx, maxy = fabric.parcel.outline.bounds
+    minx, miny, maxx, maxy = building_extent(fabric)
     walls = fabric.graph.walls
     chains: list[DimensionChain] = []
 
@@ -95,7 +120,7 @@ def interior_chains(fabric: FabricPlan) -> list[DimensionChain]:
     with cloisons has no interior chains, which is correct rather than empty:
     there is nothing structural in it to dimension.
     """
-    minx, miny, maxx, maxy = fabric.parcel.outline.bounds
+    minx, miny, maxx, maxy = building_extent(fabric)
     verticals: list[float] = []
     horizontals: list[float] = []
 

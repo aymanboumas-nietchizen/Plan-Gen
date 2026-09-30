@@ -6,7 +6,12 @@ A corridor running the depth of the building and stopping blind against a
 facade passes the first and fails the second.
 """
 
-from planfgen.circulation.reachable import ReachabilityReport, entry_space, reachable
+from planfgen.circulation.reachable import (
+    PASS_THROUGH,
+    ReachabilityReport,
+    entry_space,
+    reachable,
+)
 from planfgen.circulation.shape import (
     CirculationReport,
     Run,
@@ -15,6 +20,7 @@ from planfgen.circulation.shape import (
 
 __all__ = [
     "CirculationReport",
+    "PASS_THROUGH",
     "ReachabilityReport",
     "Run",
     "circulation_runs",

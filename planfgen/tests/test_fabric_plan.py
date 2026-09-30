@@ -173,7 +173,7 @@ def test_door_capable_at_two_metres_but_not_at_sixty_three_centimetres():
             ((0, 0.63), (3, 0.63), WallKind.CLOISON),
         ],
         [
-            ("Placard", RoomType.CELLIER, 1.5, 0.315),
+            ("Placard", RoomType.BUANDERIE, 1.5, 0.315),
             ("Chambre", RoomType.CHAMBRE, 1.5, 2.315),
             ("Sejour", RoomType.SEJOUR, 4.5, 2.0),
         ],

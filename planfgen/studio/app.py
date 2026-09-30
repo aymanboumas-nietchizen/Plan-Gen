@@ -100,7 +100,7 @@ def build_brief(width, height, north, edges, entry, rooms, profile):
         [
             RoomSpec(
                 nom=r["nom"],
-                kind=RoomType[r["kind"]],
+                kind=RoomType.from_name(r["kind"]),
                 surface_utile=float(r["surface_utile"]),
                 couleur="#888888",
                 orientation_pref=Orientation[r["orientation"]] if r["orientation"] else None,

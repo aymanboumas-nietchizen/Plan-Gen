@@ -73,7 +73,7 @@ ROOM_LABELS: dict[str, str] = {
     "COULOIR": "Couloir",
     "ENTREE": "Entrée",
     "BUREAU": "Bureau",
-    "CELLIER": "Cellier",
+    "BUANDERIE": "Buanderie",
     "TERRASSE": "Terrasse",
 }
 
@@ -84,6 +84,7 @@ GATE_LABELS: dict[str, str] = {
     "min_area": "minimum réglementaire non atteint",
     "furniture": "mobilier impossible à placer",
     "circulation": "largeur de circulation insuffisante",
+    "daylight": "pièce principale ou cuisine sans fenêtre suffisante",
     "reachable": "pièce inaccessible depuis l'entrée",
     "unrealisable": "découpage irréalisable",
 }
@@ -190,8 +191,10 @@ def build(spec: dict) -> tuple[Brief, ProgrammeGraph]:
             continue
         if nom in seen:
             raise BriefError(f"Deux pièces s'appellent « {nom} ».")
-        if kind not in RoomType.__members__:
-            raise BriefError(f"Type de pièce inconnu pour « {nom} » : {kind!r}.")
+        try:
+            kind = RoomType.from_name(str(kind)).name   # "CELLIER" in old projects
+        except KeyError:
+            raise BriefError(f"Type de pièce inconnu pour « {nom} » : {kind!r}.") from None
         try:
             area = float(row.get("surface"))
         except (TypeError, ValueError):

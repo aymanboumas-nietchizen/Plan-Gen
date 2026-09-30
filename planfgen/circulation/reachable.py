@@ -23,6 +23,18 @@ from planfgen.fabric.axis import WallKind
 from planfgen.fabric.plan import FabricPlan, Space
 
 
+#: The only rooms that may be entered THROUGH another room, as (room, via)
+#: pairs of kinds. Everything else must be reachable over circulation alone.
+#:
+#: (BUANDERIE, CUISINE): the laundry is either beside the SDB or off the
+#: kitchen, on its balcony or loggia — the architect's placement rule of
+#: 2026-09-29. One hop only: the room reached this way is not itself passable,
+#: and nothing else is relaxed (a WC through the SDB is still refused).
+PASS_THROUGH: frozenset[tuple[RoomType, RoomType]] = frozenset({
+    (RoomType.BUANDERIE, RoomType.CUISINE),
+})
+
+
 @dataclass(frozen=True)
 class ReachabilityReport:
     """What the search found, and whether it is good enough to keep."""
@@ -111,14 +123,18 @@ def reachable(fabric: FabricPlan) -> ReachabilityReport:
 
     # The same search again, but refusing to pass *through* a habitable room.
     # The entry itself is always passable — coming in through it is the point.
+    # A room reached legally may still lead on to a room `PASS_THROUGH` allows
+    # through it; that one is a dead end (not circulation, so never expanded).
+    kind = {nom: space.kind for nom, space in fabric.spaces.items()}
     via_circulation = {entry}
     queue = deque([entry])
     while queue:
         current = queue.popleft()
-        if current != entry and not circulation[current]:
-            continue
+        passable = current == entry or circulation[current]
         for neighbour in adjacency[current]:
-            if neighbour not in via_circulation:
+            if neighbour in via_circulation:
+                continue
+            if passable or (kind[neighbour], kind[current]) in PASS_THROUGH:
                 via_circulation.add(neighbour)
                 queue.append(neighbour)
 

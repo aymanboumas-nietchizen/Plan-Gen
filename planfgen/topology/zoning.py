@@ -35,7 +35,7 @@ ZONE_BONUS = 0.75
 #: while the WC is a service room reachable from the day side.
 _DAY = frozenset({RoomType.SEJOUR, RoomType.CUISINE, RoomType.BUREAU, RoomType.TERRASSE})
 _NIGHT = frozenset({RoomType.CHAMBRE, RoomType.CHAMBRE_PRINCIPALE, RoomType.SDB})
-_SERVICE = frozenset({RoomType.WC, RoomType.CELLIER, RoomType.COULOIR, RoomType.ENTREE})
+_SERVICE = frozenset({RoomType.WC, RoomType.BUANDERIE, RoomType.COULOIR, RoomType.ENTREE})
 
 
 def wet_cluster(programme: Programme) -> list[str]:

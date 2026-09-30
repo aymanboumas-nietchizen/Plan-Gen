@@ -52,6 +52,14 @@ _DOOR_LEAF_BY_KIND: dict[RoomType, float] = {
     RoomType.CHAMBRE_PRINCIPALE: 0.93,
     RoomType.BUREAU: 0.93,
     RoomType.SEJOUR: 0.93,
+    # The laundry takes the wet rooms' neighbour size: 0.83 leaf, 0.93 module.
+    # The user's decision of 2026-09-29, with the rename CELLIER -> BUANDERIE.
+    RoomType.BUANDERIE: 0.83,
+    # The hall keeps the opening it had as an unlisted kind — door_leaf 0.80 +
+    # 2 x door_jamb 0.10 = a 1.00 m module — written down as a decision rather
+    # than a fallback: 0.90 leaf + 2 x door_frame 0.05 = 1.00. The user's
+    # decision of 2026-09-29. (The FRONT door is `entry_leaf`, unchanged.)
+    RoomType.ENTREE: 0.90,
 }
 
 
@@ -140,8 +148,9 @@ class RegulationProfile:
 
     def door_module_for(self, kind: RoomType) -> float:
         """Metres of shared wall the door into a room of this kind needs:
-        0.83 for a WC or SDB, 0.93 for a kitchen, 1.03 for a bedroom, bureau
-        or sejour; `door_module` for any kind without a leaf of its own."""
+        0.83 for a WC or SDB, 0.93 for a kitchen or buanderie, 1.00 for the
+        entree, 1.03 for a bedroom, bureau or sejour; `door_module` for any
+        kind without a leaf of its own."""
         return self.door_leaf_for(kind) + 2 * self.door_frame_for(kind)
 
 

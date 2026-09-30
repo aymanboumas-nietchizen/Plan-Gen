@@ -320,3 +320,31 @@ def test_ifc_doors_are_deliberately_not_written(tmp_path: Path):
     with pytest.raises(NotImplementedError, match="IfcOpeningElement"):
         export_ifc_openings(tmp_path / "plan.ifc", None)
 
+
+def test_exterior_chains_dimension_the_building_not_the_lot():
+    """2026-09-29: a building fitted inside its lot was dimensioned to the lot's
+    edges. The chains now run to the outside of the facades."""
+    from planfgen.document.dimensions import building_extent
+    from planfgen.tests.test_studio import preset_brief
+    from planfgen.brief.regulation import PROFILES
+    from planfgen.search import envelope_of, grid_for
+    from planfgen.studio.pipeline import fit
+    from planfgen.studio.seed import seed_tree
+
+    # Built directly, without the search: this is about the drawing, and must
+    # not depend on which gates a run happens to pass.
+    brief, _ = preset_brief("F3", PROFILES["casablanca"])
+    tree = seed_tree(brief.programme)
+    fitted = fit(brief, tree).brief
+    fabric = tree.realise(envelope_of(fitted), fitted, grid_for(fitted)).to_fabric(fitted.profile)
+    footprint = fitted.footprint
+    minx, miny, maxx, maxy = building_extent(fabric)
+    assert (minx, miny) == pytest.approx((footprint.x, footprint.y), abs=1e-6)
+    assert (maxx, maxy) == pytest.approx(
+        (footprint.x + footprint.w, footprint.y + footprint.h), abs=1e-6
+    )
+    lot = brief.parcel.outline.bounds
+    for chain in exterior_chains(fabric):
+        lo, hi = (minx, maxx) if chain.axis == "x" else (miny, maxy)
+        assert chain.ticks[0] == pytest.approx(lo) and chain.ticks[-1] == pytest.approx(hi)
+    assert (maxy - miny) < (lot[3] - lot[1]), "the F3 does not fill its 11 m lot"
