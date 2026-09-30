@@ -1393,3 +1393,17 @@ Measured: 6 seeds x 3 profiles x F3/F4/DEMO/F3+WC. Top pick with a slot room (>2
           no wall-to-wall F4 without it was found; slot-free F4 is ~1.3 m off the party wall (gallery shows it).
 Theory:   pooled fronts are 16-38 % unsupported (no weighting reaches them); today's 1-3 plan fronts are convex.
 Next:     planfgen-engine: archive + lexi head + gallery in anneal/generate (spec in S30 report); ENTREE slot = architect's call.
+
+---
+
+## S31 — Furnished plans: L7 layout, family keys, drawn everywhere (planfgen-engine)  2026-09-30
+
+Built:    `habitability/layout.py` (`furnish`: pieces against walls, door squares both faces kept clear, nothing
+          above the allege before a window, 0.60 m walk door->every piece, bounded DFS, numpy grid; FAMILIES = the
+          Revit key vocabulary); `document/furniture.py` (one symbol set); SVG (+door swings), DXF MOBILIER/PLACARD/
+          EQUIPEMENT, `to_gh_json["furniture"]` (key, w/d/h, insertion, rotation, host room), web plan.js. L6 fix:
+          vertical-wall doors swung into the wrong room; a door off a corridor now swings into the room.
+Measured: `tools/probe_furniture.py`, 6 seeds x 3 profiles, F3/F4/DEMO/F3+WC/F4+WC/F3tight: 108/108 furnish fully,
+          45-100 ms/plan. Not a gate (in-loop FURNITURE_GATE already guarantees it): check the retained plan only.
+Found:    98/108 plans have a room L6 gives NO door (reachability walks door-capable contacts; L6 doors relations only).
+Tests:    test_layout 16 pass; suite 463 pass, 5 skip.
