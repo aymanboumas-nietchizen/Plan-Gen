@@ -1393,3 +1393,16 @@ Measured: 6 seeds x 3 profiles x F3/F4/DEMO/F3+WC. Top pick with a slot room (>2
           no wall-to-wall F4 without it was found; slot-free F4 is ~1.3 m off the party wall (gallery shows it).
 Theory:   pooled fronts are 16-38 % unsupported (no weighting reaches them); today's 1-3 plan fronts are convex.
 Next:     planfgen-engine: archive + lexi head + gallery in anneal/generate (spec in S30 report); ENTREE slot = architect's call.
+
+---
+
+## S31 — BUANDERIE, daylight gate, every room its door; corridor ends parked (planfgen-engine)  2026-09-30
+
+Built:    CELLIER->BUANDERIE (wet, 0.83 leaf, PASS_THROUGH (BUANDERIE, CUISINE) in reachable; "cellier" loads); ENTREE 0.90+2x0.05.
+          DAYLIGHT_GATE (ART. 7: ratio, >=1 m2, >=0.35 m bays, openable facade; cells, floats; in `violation`); window
+          arithmetic shared by gate, L6 and construct (LIGHT sides, `open_sides` param). L6 hangs a door for every room on
+          `access_tree`; `unentered` = L5 asked of drawn doors; free_slot: no shared wall stretch, clear run.
+Measured: daylight: presets 36->16/36, +WC 48->18/48, programmes 50->38/72 — all losses between 2 party walls (corner lot
+          generates). Doors: plans with a room not entered over drawn doors 90/90 (base), 20/20 -> 0/20.
+Parked:   corridor-ends-at-last-door rule on branch v2-corridor-end: presets 3/36, +WC 0/48. Slicing grammar needs an
+          edge band / cap over the band alone. Tests 465 pass, 5 skip, 7 xfail (strict: lost presets).
