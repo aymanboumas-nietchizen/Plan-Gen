@@ -59,13 +59,19 @@ def _space(nom: str, space) -> dict:
     }
 
 
-def to_gh_json(fabric: FabricPlan, openings=None, shafts=None) -> dict:
+def to_gh_json(fabric: FabricPlan, openings=None, shafts=None, furnished=None) -> dict:
     """Everything Rhino needs to rebuild the plan, and nothing it does not.
 
     Openings refer to walls by index into `walls`, because a JSON document has
     no object identity and a door that names its wall by geometry would have to
     be matched back by comparing floats.
+
+    `furniture` is always present — empty without `furnished` — one entry per
+    placed piece with its family key, type parameters, insertion point, rotation
+    and host room: see `planfgen.document.furniture.furniture_document`.
     """
+    from planfgen.document.furniture import furniture_document
+
     walls = list(fabric.graph.walls)
     index = {id(wall): i for i, wall in enumerate(walls)}
     profile = fabric.profile
@@ -150,6 +156,7 @@ def to_gh_json(fabric: FabricPlan, openings=None, shafts=None) -> dict:
             }
             for shaft in (shafts or [])
         ],
+        "furniture": furniture_document(furnished),
         "totals": {
             "surface_utile": round(fabric.total_utile, PLACES),
             "spaces": len(fabric.spaces),
@@ -158,11 +165,13 @@ def to_gh_json(fabric: FabricPlan, openings=None, shafts=None) -> dict:
     }
 
 
-def write_gh_json(fabric: FabricPlan, path: str | Path, openings=None, shafts=None) -> dict:
+def write_gh_json(
+    fabric: FabricPlan, path: str | Path, openings=None, shafts=None, furnished=None
+) -> dict:
     """Write the bridge document and return it."""
     import json
 
-    document = to_gh_json(fabric, openings, shafts)
+    document = to_gh_json(fabric, openings, shafts, furnished)
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(document, indent=2, ensure_ascii=False), encoding="utf-8")

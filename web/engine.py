@@ -41,6 +41,7 @@ from planfgen.brief import (
 )
 from planfgen.brief.regulation import PROFILES
 from planfgen.document import PALETTE, export_dxf, to_gh_json
+from planfgen.habitability.layout import furnish
 from planfgen.studio.pipeline import generate
 from planfgen.studio.presets import PRESETS
 from planfgen.studio.seed import spine_note
@@ -339,7 +340,8 @@ def run(spec: dict, seed: int, iterations: int) -> Option:
             }
         )
 
-    document = to_gh_json(fabric, generation.openings, generation.shafts)
+    furnished = furnish(fabric, generation.openings, generation.shafts)
+    document = to_gh_json(fabric, generation.openings, generation.shafts, furnished)
     document["solids"] = solids(document)
     document["footprint"] = [footprint.x, footprint.y, footprint.w, footprint.h]
 
@@ -357,9 +359,31 @@ def run(spec: dict, seed: int, iterations: int) -> Option:
                 "errors": [opening_error(e) for e in (generation.openings.errors if generation.openings else [])],
             },
             "document": document,
+            "mobilier": {
+                "complete": furnished.complete,
+                "pieces": len(furnished.pieces),
+                "missing": [mobilier_error(m) for m in furnished.missing],
+                "optional": [mobilier_error(m) for m in furnished.optional_missing],
+            },
         }
     )
-    return Option(payload, _dxf_bytes(generation))
+    return Option(payload, _dxf_bytes(generation, furnished))
+
+
+_MISSING_FR: dict[str, str] = {
+    "too_small": "la pièce est trop petite",
+    "doors": "aucun pan de mur libre des débattements de porte",
+    "window": "aucun pan de mur libre devant les fenêtres",
+    "crowded": "plus de place à côté du reste du mobilier",
+    "blocks_way": "toute position bloque le passage depuis la porte",
+    "no_door": "la pièce n'a pas de porte",
+}
+
+
+def mobilier_error(missing) -> str:
+    """One piece that could not be placed, in French."""
+    why = _MISSING_FR.get(missing.code, missing.reason)
+    return f"{missing.room} : {missing.item} — {why} ({missing.reason})."
 
 
 _OPENING_ERRORS: tuple[tuple[re.Pattern, str], ...] = (
@@ -402,7 +426,7 @@ def refusal(rejected_by: dict[str, int], proposed: int) -> str:
     return f"Aucun des {proposed} candidats ne passe les contrôles : " + ", ".join(parts) + "."
 
 
-def _dxf_bytes(generation) -> bytes:
+def _dxf_bytes(generation, furnished=None) -> bytes:
     with tempfile.TemporaryDirectory() as folder:
         path = Path(folder) / "plan.dxf"
         export_dxf(
@@ -410,6 +434,7 @@ def _dxf_bytes(generation) -> bytes:
             path,
             openings=generation.openings,
             shafts=generation.shafts,
+            furnished=furnished,
         )
         return path.read_bytes()
 

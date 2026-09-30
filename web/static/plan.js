@@ -113,6 +113,10 @@ function unitBody(doc, palette, X, Y, detail) {
     s.push(`<polygon points="${pts(sp.net_outline)}" fill="${colour}" fill-opacity="${detail ? 0.16 : 0.22}"/>`);
   }
 
+  // Furniture and placards (L7 layout): hairline, under the walls, so a door's
+  // swing and the pieces it must clear are read together.
+  s.push(...furniture(doc, X, Y, detail));
+
   // Walls: poché.
   s.push(`<path d="${(doc.solids || []).map(path).join("")}" fill="${INK}" fill-rule="evenodd"/>`);
 
@@ -243,6 +247,36 @@ export function plateSVG(storey, lotDims, docs, palette, opts = {}) {
   }
   s.push("</svg>");
   return s.join("");
+}
+
+// Every piece of `doc.furniture`, drawn from the primitives the engine wrote
+// (`planfgen/document/furniture.py`): the same bed as in the DXF and the SVG.
+const FURNITURE_STYLE = {
+  PLACARD: { stroke: "#8a5a2b", fill: "#f3ece2" },
+  MOBILIER: { stroke: "#5b6470", fill: "#ffffff" },
+  EQUIPEMENT: { stroke: "#3f6f8f", fill: "#ffffff" },
+};
+
+function furniture(doc, X, Y, detail) {
+  const hair = 'vector-effect="non-scaling-stroke"';
+  const out = [];
+  for (const piece of doc.furniture || []) {
+    const st = FURNITURE_STYLE[piece.layer] || FURNITURE_STYLE.MOBILIER;
+    const g = [`<g class="piece" data-family="${esc(piece.family)}" stroke="${st.stroke}" stroke-width="${detail ? 0.8 : 0.5}" fill="none"><title>${esc(piece.label)} — ${esc(piece.room)}</title>`];
+    piece.symbols.forEach((prim, i) => {
+      if (prim[0] === "poly") {
+        const pts = prim[1].map(([x, y]) => `${X(x).toFixed(3)},${Y(y).toFixed(3)}`).join(" ");
+        g.push(`<polygon points="${pts}" ${i === 0 ? `fill="${st.fill}" fill-opacity="0.9"` : ""} ${hair}/>`);
+      } else if (prim[0] === "line") {
+        g.push(`<path d="M${X(prim[1][0]).toFixed(3)} ${Y(prim[1][1]).toFixed(3)}L${X(prim[2][0]).toFixed(3)} ${Y(prim[2][1]).toFixed(3)}" ${hair}/>`);
+      } else if (prim[0] === "circle") {
+        g.push(`<circle cx="${X(prim[1][0]).toFixed(3)}" cy="${Y(prim[1][1]).toFixed(3)}" r="${prim[2]}" ${hair}/>`);
+      }
+    });
+    g.push("</g>");
+    out.push(g.join(""));
+  }
+  return out;
 }
 
 // A wall's local frame at an opening: the two ends of the span and the wall's normal.

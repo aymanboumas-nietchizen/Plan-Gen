@@ -37,6 +37,9 @@ LAYERS: dict[str, tuple[str, int, int]] = {
     "TEXTE_PIECE": ("TEXTE_PIECE", 7, 9),
     "GAINE": ("GAINE", 6, 25),
     "AXE": ("AXE", 8, 5),
+    "MOBILIER": ("MOBILIER", 9, 13),
+    "PLACARD": ("PLACARD", 32, 13),
+    "EQUIPEMENT": ("EQUIPEMENT", 140, 13),
 }
 
 #: Which layer a wall of each kind is drawn on.
@@ -197,13 +200,34 @@ def _draw_chains(msp, chains) -> None:
             dim.render()
 
 
+def _draw_furniture(msp, furnished) -> None:
+    """Every piece on its layer — MOBILIER, PLACARD, EQUIPEMENT (sanitary and
+    kitchen) — as light lines: one closed outline per piece, then its detail."""
+    from planfgen.document.furniture import CATEGORY_LAYER, symbols
+
+    for piece in furnished.pieces:
+        layer = LAYERS[CATEGORY_LAYER.get(piece.category, "MOBILIER")][0]
+        attribs = {"layer": layer}
+        for prim in symbols(piece):
+            if prim[0] == "poly":
+                msp.add_lwpolyline([tuple(p) for p in prim[1]], close=True, dxfattribs=attribs)
+            elif prim[0] == "line":
+                msp.add_line(tuple(prim[1]), tuple(prim[2]), dxfattribs=attribs)
+            elif prim[0] == "circle":
+                msp.add_circle(tuple(prim[1]), prim[2], dxfattribs=attribs)
+
+
 def export_dxf(
     fabric: FabricPlan,
     path: str | Path,
     openings=None,
     shafts=None,
+    furnished=None,
 ) -> None:
-    """Write the plan as DXF. Always `saveas`, never `save`."""
+    """Write the plan as DXF. Always `saveas`, never `save`.
+
+    With `furnished` (a `FurnishedPlan`) the furniture and placards are drawn on
+    their own layers, so a consultant can switch them off."""
     doors = list(openings.doors) if openings else []
     windows = list(openings.windows) if openings else []
     # An open passage between two circulation spaces is a gap and nothing else:
@@ -220,6 +244,8 @@ def export_dxf(
     _draw_doors(msp, doors)
     _draw_windows(msp, windows)
     _draw_shafts(msp, shafts or [])
+    if furnished is not None:
+        _draw_furniture(msp, furnished)
     _draw_stamps(msp, fabric)
     _draw_chains(msp, exterior_chains(fabric) + interior_chains(fabric))
 
