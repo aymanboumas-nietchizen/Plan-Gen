@@ -53,6 +53,30 @@ def edge_run(
     return max(0.0, hi - lo)
 
 
+def edge_slack(
+    a: tuple[float, float],
+    b: tuple[float, float],
+    envelope_rect: tuple[float, float, float, float] | None,
+    profile: RegulationProfile,
+) -> float:
+    """How far a facade axis may sit inside the parcel edge a->b and still count
+    as being on it — see `FabricPlan._slack_on`, which is this, per edge.
+
+    A plain function so the partition-level gates (daylight) measure frontage
+    exactly as the fabric will, without building it.
+    """
+    base = profile.facade_t / 2 + BOUND_TOL
+    if envelope_rect is None:
+        return base
+    (x0, y0), (x1, y1) = a, b
+    x, y, w, h = envelope_rect
+    if abs(y1 - y0) <= TOL:                      # horizontal parcel edge
+        return min(abs(y - y0), abs(y + h - y0)) + BOUND_TOL
+    if abs(x1 - x0) <= TOL:                      # vertical parcel edge
+        return min(abs(x - x0), abs(x + w - x0)) + BOUND_TOL
+    return base
+
+
 def junction_module(profile: RegulationProfile) -> float:
     """Metres of shared wall over which two circulation spaces open onto each other.
 
@@ -184,17 +208,8 @@ class FabricPlan:
         where the axes actually are. With no envelope recorded, or a building
         that fills its parcel, it is `facade_t / 2` again and nothing moves.
         """
-        base = self.profile.facade_t / 2 + BOUND_TOL
-        if self.envelope_rect is None:
-            return base
         coords = list(self.parcel.outline.exterior.coords)
-        (x0, y0), (x1, y1) = coords[edge], coords[edge + 1]
-        x, y, w, h = self.envelope_rect
-        if abs(y1 - y0) <= TOL:                      # horizontal parcel edge
-            return min(abs(y - y0), abs(y + h - y0)) + BOUND_TOL
-        if abs(x1 - x0) <= TOL:                      # vertical parcel edge
-            return min(abs(x - x0), abs(x + w - x0)) + BOUND_TOL
-        return base
+        return edge_slack(coords[edge], coords[edge + 1], self.envelope_rect, self.profile)
 
     def walls_on_edge(self, space: Space, edge: int) -> list[WallAxis]:
         """The space's walls running along one numbered edge of the parcel.

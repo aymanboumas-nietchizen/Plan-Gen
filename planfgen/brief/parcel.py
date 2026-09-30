@@ -178,6 +178,27 @@ class Parcel:
             object.__setattr__(self, "_sides", cached)
         return dict(cached)
 
+    def openable_segments(self) -> tuple[tuple[int, tuple[float, float], tuple[float, float]], ...]:
+        """(index, start, end) of every segment a window may pierce, in ring order.
+
+        Read once and kept, like `sides`: the daylight gate asks on every
+        candidate, and Shapely coordinate access is what costs.
+        """
+        cached = self.__dict__.get("_openable")
+        if cached is None:
+            coords = [tuple(c) for c in self.outline.exterior.coords]
+            cached = tuple(
+                (i, coords[i], coords[i + 1])
+                for i in range(len(coords) - 1)
+                if self.openable(i)
+            )
+            object.__setattr__(self, "_openable", cached)
+        return cached
+
+    def open_sides(self) -> frozenset[str]:
+        """The sides of the bounding box ("left", ...) with an openable segment."""
+        return frozenset(self.side_of(i) for i, _, _ in self.openable_segments())
+
     def buildable_bounds(self) -> tuple[float, float, float, float]:
         """(minx, miny, maxx, maxy) of what may be built on, after setbacks.
 

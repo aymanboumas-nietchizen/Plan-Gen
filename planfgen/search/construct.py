@@ -37,12 +37,14 @@ from planfgen.brief.programme import RoomType
 from planfgen.fabric.axis import WallKind
 from planfgen.fabric.plan import junction_module
 from planfgen.habitability.furniture import FURNITURE
+from planfgen.openings.window import DAYLIGHT_KINDS, width_owed, window_capacity
 from planfgen.partition.tree import BAND_WALL, BandCut, Cut, Direction, Leaf, SlicingTree
 
 SIDES = ("left", "right", "bottom", "top")
 
-#: What runs along a region's side: a corridor band, the street, the hub.
-BAND, STREET, HALL = 1, 2, 4
+#: What runs along a region's side: a corridor band, the street, the hub, and
+#: facade a window may pierce (the daylight gate, decret ART. 7).
+BAND, STREET, HALL, LIGHT = 1, 2, 4, 8
 CIRC = BAND | HALL
 
 #: `oblig`: none, else 0-3 the hub must TOUCH that side, 4-7 it must SPAN it.
@@ -110,7 +112,9 @@ class Constructor:
     that sibling the whole side. Both are carried down as `oblig`.
 
     Two circulation spaces join over `junction_module` of wall (a T-junction is
-    an open passage); a room needs its own door, `door_module_for(kind)`.
+    an open passage); a room needs its own door, `door_module_for(kind)`. A
+    room the law lights (`DAYLIGHT_KINDS`) needs enough openable facade for its
+    windows — the daylight gate, asked of the leaf with the same arithmetic.
     """
 
     def __init__(
@@ -118,14 +122,18 @@ class Constructor:
         brief: Brief,
         rect: tuple[float, float, float, float],
         entry_side: str | None = None,
+        open_sides: frozenset[str] | None = None,
     ):
-        """`rect` is the unit's envelope on the wall axes and `entry_side` the
-        side of it the front door is on ("left", "right", "bottom", "top").
+        """`rect` is the unit's envelope on the wall axes, `entry_side` the
+        side of it the front door is on ("left", "right", "bottom", "top"), and
+        `open_sides` the sides that may take windows.
 
-        Both are parameters rather than read off the parcel because a unit is
+        All are parameters rather than read off the parcel because a unit is
         not always the building: on a floor plate the envelope is set by the
-        plate and the front door opens off a landing, not the street. The
-        default is the single-flat case — the parcel's entry edge.
+        plate, the front door opens off a landing, not the street, and a side
+        against a neighbouring flat or the stair core is blind. The defaults
+        are the single-flat case — the parcel's entry edge and its openable
+        segments (`Parcel.open_sides`).
         """
         prof = brief.profile
         programme = brief.programme
@@ -160,6 +168,12 @@ class Constructor:
         if entry_side is None:
             entry_side = brief.parcel.side_of(brief.parcel.entry_edge)
         self.street = SIDES.index(entry_side)
+        if open_sides is None:
+            open_sides = brief.parcel.open_sides()
+        self.open = tuple(side in open_sides for side in SIDES)
+        self.prof = prof
+        self.lit = [k in DAYLIGHT_KINDS for k in kind]
+        self.lit_bits = sum(1 << i for i, k in enumerate(kind) if k in DAYLIGHT_KINDS)
         self.jn = junction_module(prof)
         # The run each room needs: off a band, its own door; off the hub, its
         # own door if the hub is a hall, the wider of the two if it is a room.
@@ -188,7 +202,7 @@ class Constructor:
         self.calls, self.max_calls = 0, max_calls
         self._alive = {}
         t = (self.t_facade,) * 4
-        flags = tuple(STREET if i == self.street else 0 for i in range(4))
+        flags = self._outer_flags()
         x, y, w, h = self.rect
         state = ((1 << self.n) - 1, x, y, w, h, t, flags, budget, FREE)
         try:
@@ -201,8 +215,15 @@ class Constructor:
         """True once a find at `budget` has exhausted the whole search."""
         x, y, w, h = self.rect
         t = (self.t_facade,) * 4
-        flags = tuple(STREET if i == self.street else 0 for i in range(4))
+        flags = self._outer_flags()
         return self._key(((1 << self.n) - 1, x, y, w, h, t, flags, budget, FREE)) in self.dead
+
+    def _outer_flags(self) -> tuple[int, ...]:
+        """What runs along each side of the whole unit: the street, and light."""
+        return tuple(
+            (STREET if i == self.street else 0) | (LIGHT if self.open[i] else 0)
+            for i in range(4)
+        )
 
     # --- the local model ----------------------------------------------------
     def _sum(self, mask: int) -> float:
@@ -227,6 +248,13 @@ class Constructor:
             return False
         if nw * nh < minimum:
             return False
+        if self.lit[i]:
+            got = 0.0
+            for side, f in enumerate(flags):
+                if f & LIGHT:
+                    got += window_capacity(nw if side >= 2 else nh, self.prof)
+            if got < width_owed(nw * nh, self.prof) - _EPS:
+                return False
         if i == self.hub:
             if not flags[self.street] & STREET:
                 return False
@@ -247,6 +275,8 @@ class Constructor:
             return False
         if budget > bin(mask).count("1") - 1:
             return False
+        if mask & self.lit_bits and not any(f & LIGHT for f in flags):
+            return False                          # a room the law lights, and no window
         hi = nw * (1 + SLACK)
         m = mask
         while m:
@@ -354,9 +384,9 @@ class Constructor:
                     fh = list(flags); fh[hi_s] = f_hi
                     if self.hub is not None:     # the street matters only to the hub
                         if not h_low:
-                            fl = [f & CIRC for f in fl]
+                            fl = [f & (CIRC | LIGHT) for f in fl]
                         if not h_high:
-                            fh = [f & CIRC for f in fh]
+                            fh = [f & (CIRC | LIGHT) for f in fh]
                     fl, fh = tuple(fl), tuple(fh)
                     for b_low in range(max(0, rest - (n_high - 1)), min(rest, n_low - 1) + 1):
                         out.append((d, band,
@@ -431,6 +461,7 @@ def construct(
     tries: int = TRIES,
     max_calls: int = CALLS,
     entry_side: str | None = None,
+    open_sides: frozenset[str] | None = None,
 ) -> list[SlicingTree]:
     """Distinct constructed trees for `brief` on `rect`, most bands first.
 
@@ -438,7 +469,7 @@ def construct(
     does not search again; a budget proven empty is skipped outright. The same
     seed always gives the same list.
     """
-    finder = Constructor(brief, rect, entry_side)
+    finder = Constructor(brief, rect, entry_side, open_sides)
     rng = random.Random(seed)
     bands = len(brief.programme.band_rooms)
     out: list[SlicingTree] = []
@@ -465,6 +496,7 @@ def best_start(
     tries: int = TRIES,
     max_calls: int = CALLS,
     follow: bool = True,
+    open_sides: frozenset[str] | None = None,
 ) -> SlicingTree:
     """The tree to anneal from: the best that passes every gate among `tree0`
     and the trees `construct` builds on `rect`; `tree0` if none passes.
@@ -473,14 +505,15 @@ def best_start(
     judged by `evaluate`, on a footprint solved for itself (`anneal.refit`);
     ranking by `globale` is the search's own objective, and a tree that fails
     a gate is not ranked at all. `rect` defaults to the brief's envelope;
-    `follow=False` judges every tree on it as given (a unit on a floor plate).
+    `follow=False` judges every tree on it as given (a unit on a floor plate);
+    `open_sides` are the sides of `rect` that may take windows (`Constructor`).
     """
     from planfgen.search.anneal import envelope_of, evaluate, grid_for
 
     grid = grid_for(brief)
     best = evaluate(tree0, brief, grid, graph, 0, follow)
     rect = envelope_of(brief) if rect is None else rect
-    for tree in construct(brief, rect, seed, tries, max_calls, entry_side):
+    for tree in construct(brief, rect, seed, tries, max_calls, entry_side, open_sides):
         if tree == tree0:
             continue
         result = evaluate(tree, brief, grid, graph, 0, follow)

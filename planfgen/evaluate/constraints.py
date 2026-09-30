@@ -20,6 +20,15 @@ protected by `FURNITURE_GATE`, which is a gate CLAUDE.md does authorise and
 which asks the question that actually matters: not "is this room a slot" but
 "does a bed go in it".
 
+**Daylight is a gate** since 2026-09-29 (the architect's decision): decret
+2-64-445 ART. 7 lights every habitable room and the kitchen to `daylight_ratio`
+of its floor and never under 1 m2, and a bay under 0.35 m is not a window. A
+bedroom without a window is not a darker plan, it is not a legal one.
+`DAYLIGHT_GATE` asks it of the partition cells with float arithmetic, measuring
+frontage exactly as the fabric will (`fabric.plan.edge_slack`), and sizes the
+windows with the same functions L6 uses (`openings.window`), so the gate and the
+drawn windows agree.
+
 The gates run cheapest first and the first failure wins, so a candidate that
 fails on a float comparison never pays for the wall graph. Building the fabric
 is by far the most expensive thing here, and only `REACHABLE_GATE` needs it.
@@ -34,7 +43,10 @@ from planfgen.brief.footprint import Footprint
 from planfgen.brief.plan import Brief
 from planfgen.circulation.reachable import reachable
 from planfgen.circulation.shape import circulation_runs
+from planfgen.fabric.axis import TOL, WallKind
+from planfgen.fabric.plan import edge_slack
 from planfgen.habitability.check import fit_report, furniture_shortfall
+from planfgen.openings.window import DAYLIGHT_KINDS, width_owed, window_capacity
 
 #: How far a room's net area may miss its target and still be a plan, as a
 #: fraction. Free cuts are exact, so this slack exists for structural ones,
@@ -135,6 +147,61 @@ def _coverage_ok(plan, brief: Brief) -> bool:
     )
 
 
+def daylight_capacity(cell, plan, brief: Brief) -> float:
+    """Metres of legal window a cell's openable facade can take.
+
+    For each FACADE side of the cell, the run of it lying on an openable parcel
+    segment (within the same slack the fabric allows, `edge_slack`), clipped to
+    the cell's clear floor; each run is worth `window_capacity` of it — jambs
+    off, nothing if under the minimum window. Float arithmetic only.
+    """
+    profile = brief.profile
+    kinds = cell.wall_kinds
+    t = {side: profile.thickness_of(kinds[side].value) for side in kinds}
+    net_x = (cell.x + t["left"] / 2, cell.x + cell.w - t["right"] / 2)
+    net_y = (cell.y + t["bottom"] / 2, cell.y + cell.h - t["top"] / 2)
+    segments = brief.parcel.openable_segments()
+    total = 0.0
+    for side, fixed in (
+        ("left", cell.x), ("right", cell.x + cell.w),
+        ("bottom", cell.y), ("top", cell.y + cell.h),
+    ):
+        if kinds[side] is not WallKind.FACADE:
+            continue
+        horizontal = side in ("bottom", "top")
+        across, along = (1, 0) if horizontal else (0, 1)
+        lo, hi = net_x if horizontal else net_y
+        run = 0.0
+        for _, a, b in segments:
+            if abs(a[across] - b[across]) > TOL:          # not parallel to this side
+                continue
+            if abs(fixed - a[across]) > edge_slack(a, b, plan.envelope_rect, profile):
+                continue
+            e_lo, e_hi = sorted((a[along], b[along]))
+            run += max(0.0, min(hi, e_hi) - max(lo, e_lo))
+        total += window_capacity(run, profile)
+    return total
+
+
+def daylight_shortfall(plan, brief: Brief) -> dict[str, float]:
+    """Every room the law lights, mapped to the fraction of its window it lacks
+    (0.0 = lit). Rooms are those of a `DAYLIGHT_KINDS` kind: habitable rooms and
+    the kitchen, decret ART. 7."""
+    programme = brief.programme
+    out: dict[str, float] = {}
+    for cell in plan.cells:
+        if programme.by_nom(cell.nom).kind not in DAYLIGHT_KINDS:
+            continue
+        owed = width_owed(cell.net_area(brief.profile), brief.profile)
+        got = daylight_capacity(cell, plan, brief)
+        out[cell.nom] = max(0.0, owed - got) / owed
+    return out
+
+
+def _daylight_ok(plan, brief: Brief) -> bool:
+    return not any(v > 1e-9 for v in daylight_shortfall(plan, brief).values())
+
+
 def _circulation_ok(plan, brief: Brief) -> bool:
     """No corridor may run past its last door by more than its own width.
 
@@ -162,12 +229,15 @@ AREA_GATE = _Gate("area", _areas_ok)
 COVERAGE_GATE = _Gate("coverage", _coverage_ok)
 ASPECT_GATE = _Gate("aspect", _aspects_ok)
 FURNITURE_GATE = _Gate("furniture", _furniture_ok)
+DAYLIGHT_GATE = _Gate("daylight", _daylight_ok)
 MIN_AREA_GATE = _Gate("min_area", _minima_ok)
 CIRCULATION_GATE = _Gate("circulation", _circulation_ok)
 REACHABLE_GATE = _Gate("reachable", _reachable_ok)
 
 #: The gates a candidate must pass, cheapest first. REACHABLE_GATE is last
-#: because it is the one that builds the wall graph.
+#: because it is the one that builds the wall graph. DAYLIGHT_GATE is float
+#: arithmetic on cells and parcel segments, a little dearer than the furniture
+#: comparisons, so it follows them; both precede anything that builds walls.
 #:
 #: ASPECT_GATE is deliberately absent — see the module docstring. It is still
 #: defined, so a caller who wants a stricter run can add it, but nothing in the
@@ -177,6 +247,7 @@ GATES: tuple[Gate, ...] = (
     COVERAGE_GATE,
     MIN_AREA_GATE,
     FURNITURE_GATE,
+    DAYLIGHT_GATE,
     CIRCULATION_GATE,
     REACHABLE_GATE,
 )
@@ -215,7 +286,7 @@ def violation(plan, brief: Brief) -> float:
     """How far `plan` is from passing every gate. Zero iff `all_gates` passes.
 
     Staged, so the walk fixes geometry before paying for the wall graph: the
-    cheap gates (area, coverage, minimum area, furniture) are measured first,
+    cheap gates (area, coverage, minimum area, furniture, daylight) are measured first,
     and only a plan that clears all of them is built into a fabric and counted
     for dead ends and unreachable rooms.
     """
@@ -231,6 +302,7 @@ def violation(plan, brief: Brief) -> float:
             net_w, net_h = cell.net_dims(profile)
             cheap += max(0.0, minimum - net_w * net_h) / minimum
     cheap += furniture_shortfall(plan, profile)
+    cheap += sum(daylight_shortfall(plan, brief).values())
     if cheap > 0.0:
         return CHEAP_STAGE + cheap
 

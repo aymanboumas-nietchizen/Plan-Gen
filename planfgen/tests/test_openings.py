@@ -177,8 +177,10 @@ def test_rooms_that_do_reach_a_legal_edge_get_their_glass():
         assert any(id(w) in lit for w in space.bounding), nom
 
 
-def test_the_brief_daylight_flag_beats_the_kind_default():
-    """A Space carries a kind, not the line of programme it came from."""
+def test_the_brief_daylight_flag_cannot_waive_article_7():
+    """Until 2026-09-29 `daylight=False` on a line of brief switched a room's
+    windows off. Daylight is a gate now (decret ART. 7): the flag may ask for
+    MORE light, never less — the habitable rooms are lit, the rest are not."""
     fabric = flat()
     dark = Programme(
         [
@@ -187,7 +189,12 @@ def test_the_brief_daylight_flag_beats_the_kind_default():
         ]
     )
     report = place_windows(fabric, P, programme=dark)
-    assert report.windows == [] and report.errors == []
+    lit = {nom for nom, space in fabric.spaces.items()
+           if any(w.wall in space.bounding and needs_daylight(space) for w in report.windows)}
+    assert lit == {n for n, s in fabric.spaces.items() if needs_daylight(s)} - {"Ch2"}
+    assert any(e.startswith("Ch2:") for e in report.errors), "blind is still named"
+    assert not any(needs_daylight(fabric.spaces[e.split(":")[0]]) is False
+                   for e in report.errors)
 
 
 # --- doors ------------------------------------------------------------------

@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from planfgen.brief.regulation import MA_CASABLANCA, MA_ECONOMIQUE
-from planfgen.evaluate.constraints import all_gates
+from planfgen.evaluate.constraints import DAYLIGHT_GATE, GATES, all_gates
 from planfgen.fabric.plan import junction_module
 from planfgen.partition import BandCut, Cut, Direction, Leaf, SlicingTree
 from planfgen.search import envelope_of, evaluate, grid_for
@@ -55,9 +55,31 @@ NESTED_F3 = SlicingTree(
 )
 
 
+#: Street south, a garden east. The nested F3 lights its cuisine through the
+#: east side; between two party walls it is blind, and since daylight became a
+#: gate (2026-09-29) that plan is refused (see test_the_nested_f3_is_blind_between_party_walls).
+CORNER = ("STREET", "GARDEN", "COURT", "MITOYEN")
+
+
+def _on(edges, name, profile):
+    rooms, width, depth = PROBE.CASES[name]
+    saved, PROBE.EDGES = PROBE.EDGES, edges
+    try:
+        return PROBE.brief_for(rooms, width, depth, profile)
+    finally:
+        PROBE.EDGES = saved
+
+
 def _brief(profile):
-    rooms, width, depth = PROBE.CASES["F3wc+deg"]
-    return PROBE.brief_for(rooms, width, depth, profile)
+    return _on(CORNER, "F3wc+deg", profile)
+
+
+def test_the_nested_f3_is_blind_between_party_walls():
+    """Decret ART. 7, a gate since 2026-09-29: the cuisine in the middle of the
+    east row sees no sky when the east side is a party wall."""
+    brief = fit(_on(PROBE.EDGES, "F3wc+deg", MA_CASABLANCA), NESTED_F3).brief
+    plan = NESTED_F3.realise(envelope_of(brief), brief, grid_for(brief))
+    assert all_gates(plan, brief) == (False, "daylight")
 
 
 def test_a_separate_wc_f3_with_a_degagement_exists():
@@ -159,8 +181,7 @@ def test_l6_opens_the_junction_with_no_leaf_and_draws_a_gap(tmp_path):
 def test_the_constructive_probe_builds_a_separate_wc_plan():
     """What the studio's walk found 2 of 18 times, construction finds directly —
     once each tree is given its own footprint, which is the S27 spec."""
-    rooms, width, depth = PROBE.CASES["F3wc"]
-    brief = PROBE.brief_for(rooms, width, depth, MA_CASABLANCA)
+    brief = _on(CORNER, "F3wc", MA_CASABLANCA)
     _, fitting = attempts(brief)[0]
     finder = PROBE.Finder(fitting.brief, envelope_of(fitting.brief), 1)
     rng = random.Random(1)
@@ -172,7 +193,9 @@ def test_the_constructive_probe_builds_a_separate_wc_plan():
         own = fit(brief, tree).brief
         plan = tree.realise(envelope_of(own), own, grid_for(own))
         assert {c.nom for c in plan.cells if not c.is_band} == set(finder.rooms)
-        valid += all_gates(plan, own)[0]
+        # The prototype predates the daylight gate (2026-09-29) and does not
+        # model windows; the engine's `search.construct` does. Every other gate.
+        valid += all(g.check(plan, own) for g in GATES if g is not DAYLIGHT_GATE)
     assert valid, "no constructed tree passed every gate on its own footprint"
 
 

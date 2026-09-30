@@ -40,9 +40,21 @@ def _probe():
 PROBE = _probe()
 
 
-def _case(name, profile):
+def _case(name, profile, edges=None):
     rooms, width, depth = PROBE.CASES[name]
-    return PROBE.brief_for(rooms, width, depth, profile)
+    if edges is None:
+        return PROBE.brief_for(rooms, width, depth, profile)
+    saved, PROBE.EDGES = PROBE.EDGES, edges
+    try:
+        return PROBE.brief_for(rooms, width, depth, profile)
+    finally:
+        PROBE.EDGES = saved
+
+
+#: A corner lot: street south, a garden east. Since daylight became a gate
+#: (2026-09-29) an F3 with its WC between two party walls cannot light every
+#: room (tests/test_studio.BLIND_BETWEEN_PARTY_WALLS); with a third facade it can.
+CORNER = ("STREET", "GARDEN", "COURT", "MITOYEN")
 
 
 @pytest.mark.parametrize("kind", sorted(FURNITURE, key=lambda k: k.name))
@@ -65,7 +77,7 @@ def test_the_depth_window_is_the_furniture_gate_in_closed_form(kind):
 
 def test_the_leaf_test_is_the_furniture_gate():
     """No SpaceCell is built, but the answer is the one `fits` gives."""
-    brief = _case("F3wc", MA_CASABLANCA)
+    brief = _case("F3wc", MA_CASABLANCA, CORNER)
     finder = Constructor(brief, envelope_of(brief))
     rng = random.Random(3)
     t = (0.30, 0.10, 0.10, 0.30)
@@ -81,7 +93,7 @@ def test_the_leaf_test_is_the_furniture_gate():
         a, b = cell.net_dims(brief.profile)
         expect = (spec is None or fits(cell, spec, brief.profile)) and a * b >= (
             brief.profile.min_area.get(kind) or 0.0)
-        flags = (1, 1, 1 | 2, 1)               # served everywhere, street below
+        flags = (1 | 8, 1 | 8, 1 | 2 | 8, 1 | 8)  # served and lit everywhere, street below
         got = finder._leaf_ok(i, w, h, t, flags, -1)
         if expect and kind is not RoomType.ENTREE:
             assert got, (finder.noms[i], w, h)
@@ -103,7 +115,7 @@ def test_it_builds_whole_programmes_with_the_bands_asked_for():
 
 def test_constructed_trees_pass_every_gate_on_their_own_footprint():
     """A separate 2 m2 WC: what the walk found 2 of 18 times."""
-    brief = _case("F3wc", MA_CASABLANCA)
+    brief = _case("F3wc", MA_CASABLANCA, CORNER)
     _, fitting = attempts(brief)[0]
     valid = 0
     for tree in construct(fitting.brief, envelope_of(fitting.brief), seed=1):
@@ -144,7 +156,7 @@ def test_a_hopeless_envelope_is_proven_empty_at_once():
 def test_best_start_prefers_a_constructed_tree_that_passes():
     from planfgen.search.construct import best_start
 
-    brief = _case("F3wc", MA_CASABLANCA)
+    brief = _case("F3wc", MA_CASABLANCA, CORNER)
     tree0, fitting = attempts(brief)[0]
     grid = grid_for(fitting.brief)
     assert evaluate(tree0, fitting.brief, grid, None, 0) is None   # the seed fails
@@ -166,8 +178,8 @@ def test_the_studio_builds_an_f3_with_a_separate_wc(profile):
     """Through `pipeline.generate`, as the studio runs it: 2 of 18 before S28."""
     from planfgen.studio.pipeline import generate
 
-    rooms, width, depth = PROBE.CASES["F3wc"]
-    brief = PROBE.brief_for(rooms, width, depth, profile)
+    rooms, _, _ = PROBE.CASES["F3wc"]
+    brief = _case("F3wc", profile, CORNER)
     run = generate(brief, PROBE.graph_for(rooms), 1, 100)
     assert run.ok
     assert "WC" in {c.nom for c in run.result.plan.cells}

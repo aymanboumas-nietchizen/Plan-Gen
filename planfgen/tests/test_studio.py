@@ -288,8 +288,13 @@ def test_the_corridorless_plan_is_one_the_engine_actually_builds():
     note = spine_note(brief.programme, budget)
     assert note.kind == "open", note.message
 
+    # From the best start the engine builds (the seed alone leaves a room
+    # blind since daylight became a gate, 2026-09-29), as `generate` does.
+    from planfgen.search.construct import best_start
+
     stats = RunStats()
-    best = anneal(brief, studio_seed_tree(brief.programme), 120, seed=0, stats=stats)
+    start = best_start(brief, studio_seed_tree(brief.programme), None, seed=0)
+    best = anneal(brief, start, 120, seed=0, stats=stats)
 
     assert best, stats.explain()
     plan = best[0].plan
@@ -352,11 +357,27 @@ def preset_brief(key: str, profile):
     return brief, graph
 
 
+#: Lost when daylight became a gate (2026-09-29, decret ART. 7). Between two
+#: party walls a 9 m (F3) or 11 m (F4) flat has two facades, and no slicing tree
+#: with one corridor gives all four (F3) or five (F4) habitable rooms and the
+#: kitchen a window at their exact areas — the constructor proves it empty in
+#: 0.1 s; without the gate every tree it builds leaves the kitchen or a bedroom
+#: blind. On a corner lot (a third facade) both generate 2/2 on every profile.
+#: strict: the day one generates again, this fails and the mark comes off.
+BLIND_BETWEEN_PARTY_WALLS = {
+    ("F3", "placeholder"), ("F3", "casablanca"),
+    ("F4", "placeholder"), ("F4", "economique"), ("F4", "casablanca"),
+}
+
+
 @pytest.mark.parametrize("profile_name", sorted(PROFILES))
 @pytest.mark.parametrize("key", sorted(PRESETS))
-def test_every_preset_generates_on_every_profile(key, profile_name):
+def test_every_preset_generates_on_every_profile(key, profile_name, request):
     """A preset that generates nothing is worse than no preset. Four seeds,
     because one is a coin toss (F4 on the decret: 3 of 4, 2026-09-27)."""
+    if (key, profile_name) in BLIND_BETWEEN_PARTY_WALLS:
+        request.applymarker(pytest.mark.xfail(
+            strict=True, reason="every room lit: impossible on this lot (ART. 7)"))
     brief, graph = preset_brief(key, PROFILES[profile_name])
     assert brief.budget.ok, brief.budget.explain()
 
@@ -441,6 +462,8 @@ def test_a_programme_with_no_day_zone_has_no_zoned_seed():
     assert len(seed_trees(brief.programme)) == 1
 
 
+@pytest.mark.xfail(strict=True, reason="F4 between party walls cannot light every "
+                   "room (daylight gate, 2026-09-29): see BLIND_BETWEEN_PARTY_WALLS")
 def test_the_f4_preset_is_built_wall_to_wall():
     """2026-09-28. At the parcel's own proportion the F4 stopped 1.9 m short of
     the east party wall. Between two party walls it now spans the lot."""

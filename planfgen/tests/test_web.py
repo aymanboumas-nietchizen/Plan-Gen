@@ -93,11 +93,20 @@ def TestClient(app):
 ITER = 200
 
 
+def f4() -> dict:
+    """The F4 preset on the decret, on a corner lot (a garden east). Since
+    daylight became a gate (2026-09-29) the F4 between two party walls lights
+    no plan at all (tests/test_studio.BLIND_BETWEEN_PARTY_WALLS)."""
+    spec = engine.default_spec("F4", "economique")
+    spec["edges"] = ["STREET", "GARDEN", "COURT", "MITOYEN"]
+    return spec
+
+
 def _first(ok: bool) -> int | None:
     """The first seed of F4 on the decret that passes (or is refused). Found, not
     pinned: the search is being rewritten, and on 2026-09-29 it was 1 and 2."""
     for seed in range(1, 13):
-        if engine.run(engine.default_spec("F4", "economique"), seed, ITER).payload["ok"] is ok:
+        if engine.run(f4(), seed, ITER).payload["ok"] is ok:
             return seed
     return None
 
@@ -111,10 +120,6 @@ needs_refusal = pytest.mark.skipif(REFUSED is None, reason="no F4 seed in 1..12 
 def client():
     with TestClient(create_app(lambda: ThreadPoolExecutor(2))) as c:
         yield c
-
-
-def f4() -> dict:
-    return engine.default_spec("F4", "economique")
 
 
 def generate(client, spec, seed=PASSES, iterations=ITER):
@@ -174,7 +179,7 @@ def test_a_lot_too_small_is_not_ok(client):
         ({"width": "large"}, "width"),
         ({"width": 1.0}, "entre"),
         ({"edges": ["STREET", "MITOYEN"]}, "quatre limites"),
-        ({"entry_edge": 1}, "Rue ou Jardin"),
+        ({"entry_edge": 3}, "Rue ou Jardin"),
         ({"rooms": []}, "vide"),
     ],
 )
@@ -399,10 +404,16 @@ def test_the_page_composes_the_unit_brief_with_the_same_fields():
     assert keys == set(engine.default_spec())
 
 
-def test_every_default_unit_generates_in_its_slot():
+@pytest.mark.parametrize("unit_id", [
+    "A",
+    # Its slot is between party walls: lighting every room is impossible there
+    # since daylight became a gate (2026-09-29; test_studio.BLIND_BETWEEN_PARTY_WALLS).
+    pytest.param("B", marks=pytest.mark.xfail(strict=True, reason="ART. 7 in this slot")),
+])
+def test_every_default_unit_generates_in_its_slot(unit_id):
     """The demo is not a hand-calibrated fixture: both unit types of the default
     project pass on some seed of the first six."""
     doc = project.default_project()
-    for unit in doc["units"]:
-        spec = project.unit_spec(doc, unit["id"])
-        assert any(engine.run(spec, seed, ITER).payload["ok"] for seed in range(1, 7)), unit["id"]
+    assert {u["id"] for u in doc["units"]} == {"A", "B"}
+    spec = project.unit_spec(doc, unit_id)
+    assert any(engine.run(spec, seed, ITER).payload["ok"] for seed in range(1, 7)), unit_id

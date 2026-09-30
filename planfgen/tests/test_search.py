@@ -132,7 +132,9 @@ def seed_tree() -> SlicingTree:
                 Cut(
                     Direction.H,
                     False,
-                    (Leaf("Ch1"), Cut(Direction.H, False, (Leaf("Ch2"), Leaf("SDB")))),
+                    # Ch2 at the court, the SDB between: every habitable room
+                    # on a facade that may take a window (daylight gate, 2026-09-29)
+                    (Leaf("Ch1"), Cut(Direction.H, False, (Leaf("SDB"), Leaf("Ch2")))),
                 ),
             ),
         )
@@ -346,7 +348,9 @@ def test_minimum_width_is_not_gated():
                 Cut(
                     Direction.H,
                     False,
-                    (Leaf("Ch1"), Cut(Direction.H, False, (Leaf("Ch2"), Leaf("SDB")))),
+                    # Ch2 at the court, the SDB between: every habitable room
+                    # on a facade that may take a window (daylight gate, 2026-09-29)
+                    (Leaf("Ch1"), Cut(Direction.H, False, (Leaf("SDB"), Leaf("Ch2")))),
                 ),
             ),
         )

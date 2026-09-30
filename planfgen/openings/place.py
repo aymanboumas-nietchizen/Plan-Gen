@@ -20,7 +20,7 @@ from planfgen.brief.regulation import RegulationProfile
 from planfgen.fabric.axis import WallAxis, WallKind
 from planfgen.fabric.plan import FabricPlan, Space
 from planfgen.openings.door import Door, Passage, free_slot
-from planfgen.openings.window import Window, needs_daylight, size_windows
+from planfgen.openings.window import Window, needs_daylight, required_glazing, size_windows
 from planfgen.topology.relations import RelationType
 
 
@@ -218,17 +218,17 @@ def place_windows(
 ) -> OpeningReport:
     """Windows on legal edges only; a blind daylight room is an error.
 
-    `programme` is optional: a `Space` carries a kind but not the line of brief
-    it came from, so where the brief is to hand its explicit `daylight` flag is
-    used, and otherwise the kind decides.
+    Every room of a `DAYLIGHT_KINDS` kind is lit: decret ART. 7 is a law, and
+    since 2026-09-29 a gate (`DAYLIGHT_GATE`), so no line of brief can waive it.
+    `programme` is optional; where it is to hand its `daylight` flag can ask
+    for MORE light — a window in a room the law does not require one in.
     """
     report = OpeningReport()
 
     for nom, space in fabric.spaces.items():
+        wanted = needs_daylight(space)
         if programme is not None:
-            wanted = programme.by_nom(nom).daylight
-        else:
-            wanted = needs_daylight(space)
+            wanted = wanted or programme.by_nom(nom).daylight
         if not wanted:
             continue
 
@@ -242,7 +242,7 @@ def place_windows(
         placed = size_windows(space, walls, profile)
         report.windows.extend(placed)
         got = sum(window.glazing for window in placed)
-        needed = space.surface_utile * profile.daylight_ratio
+        needed = required_glazing(space, profile)
         if got + 1e-9 < needed:
             report.errors.append(
                 f"{nom}: {got:.2f} m2 of glazing against {needed:.2f} m2 required"

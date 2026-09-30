@@ -141,14 +141,16 @@ def test_collect_is_deterministic_and_returns_what_generate_returns():
     """A real, small run through the engine: the pool is reproducible, and the
     plan `collect` says the run returned is the one `pipeline.generate` returns
     for the same brief and seed — so the pool describes the studio's search."""
-    from planfgen.brief.regulation import MA_PROFILE
+    from planfgen.brief.regulation import MA_ECONOMIQUE
     from planfgen.studio.pipeline import generate
 
-    a = PR.collect("F3", "placeholder", 1, 20)
-    b = PR.collect("F3", "placeholder", 1, 20)
-    assert a["plans"], "the F3 preset builds on the placeholder profile"
+    # On the decret: on the placeholder profile the F3 preset cannot light
+    # every room between its party walls (daylight gate, 2026-09-29).
+    a = PR.collect("F3", "economique", 1, 20)
+    b = PR.collect("F3", "economique", 1, 20)
+    assert a["plans"], "the F3 preset builds on the decret"
     assert [p.key for p in a["plans"]] == [p.key for p in b["plans"]]
-    brief, graph = PR.case_brief("F3", MA_PROFILE)
+    brief, graph = PR.case_brief("F3", MA_ECONOMIQUE)
     run = generate(brief, graph, 1, 20)
     assert PR.plan_of(run.result, "anneal").key == a["returned"]
     assert a["returned"] in {p.key for p in a["plans"]}

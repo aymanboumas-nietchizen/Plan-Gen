@@ -17,9 +17,13 @@ from planfgen.openings.place import (
 from planfgen.openings.window import (
     DAYLIGHT_KINDS,
     Window,
+    glazing_owed,
     needs_daylight,
     required_glazing,
     size_windows,
+    width_owed,
+    window_capacity,
+    window_widths,
 )
 
 __all__ = [
@@ -30,6 +34,7 @@ __all__ = [
     "Passage",
     "Window",
     "free_slot",
+    "glazing_owed",
     "needs_daylight",
     "openable_walls",
     "place_doors",
@@ -37,4 +42,7 @@ __all__ = [
     "place_windows",
     "required_glazing",
     "size_windows",
+    "width_owed",
+    "window_capacity",
+    "window_widths",
 ]
