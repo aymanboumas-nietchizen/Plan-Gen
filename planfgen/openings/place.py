@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from planfgen.brief.regulation import RegulationProfile
 from planfgen.fabric.axis import WallAxis, WallKind
 from planfgen.fabric.plan import FabricPlan, Space
+from planfgen.circulation.reachable import access_tree
 from planfgen.openings.door import Door, Passage, free_slot
 from planfgen.openings.window import Window, needs_daylight, required_glazing, size_windows
 from planfgen.topology.relations import RelationType
@@ -87,45 +88,116 @@ def place_doors(fabric: FabricPlan, topology, profile: RegulationProfile) -> Ope
         if frozenset((a, b)) in joined:
             continue
 
-        run = fabric.shared_wall_length(a, b)
-        if not fabric.door_capable(a, b):
-            what = "an open passage" if fabric.is_passage(a, b) else "a door"
-            report.errors.append(
-                f"{a}~{b}: {run:.2f} m of shared wall, under the "
-                f"{fabric.opening_run(a, b):.2f} m {what} needs"
-            )
-            continue
+        if _hang(fabric, profile, report, on_wall, a, b, swing_into=b):
+            joined.add(frozenset((a, b)))
 
-        wall = fabric.graph.wall_between(
-            fabric.spaces[a].axis_polygon, fabric.spaces[b].axis_polygon
-        )
-        if wall is None:
-            report.errors.append(f"{a}~{b}: {run:.2f} m shared but no single wall to host a door")
-            continue
-
-        kind = fabric.door_kind(a, b)
-        leaf = profile.door_leaf_for(kind)
-        taken = on_wall.setdefault(id(wall), [])
-        t = free_slot(wall, taken, leaf, profile.door_frame_for(kind))
-        if t is None:
-            report.errors.append(
-                f"{a}~{b}: no room left on that wall clear of the doors already on it"
-            )
-            continue
-
-        door = Door(
-            wall=wall,
-            t=t,
-            leaf=leaf,
-            swing_into=b,
-            hinge="low",
-            swing_side=_side_of(wall, fabric.spaces[b]),
-        )
-        taken.append(door)
-        report.doors.append(door)
-
+    # Every room its door. Relations say which doors the architect wants;
+    # reachability (L5) proves a legal way to every room over door-capable
+    # walls, and a room no relation connects that way still has to be
+    # entered: it gets its door on that way (`access_tree`), so the plan as
+    # drawn is the plan the gate passed. (2026-09-30: 98 of 108 generated
+    # plans had a room with no door at all.)
     _place_entry(fabric, profile, report, on_wall)
+    missing = set(unentered(fabric, report))
+    for room, parent in access_tree(fabric, joined).items():
+        if room in missing and room in unentered(fabric, report):
+            _hang(fabric, profile, report, on_wall, parent, room, swing_into=room)
     return report
+
+
+def _hang(fabric, profile, report: OpeningReport, on_wall, a: str, b: str, swing_into: str) -> bool:
+    """One door between `a` and `b`, or an error saying why not."""
+    run = fabric.shared_wall_length(a, b)
+    if not fabric.door_capable(a, b):
+        what = "an open passage" if fabric.is_passage(a, b) else "a door"
+        report.errors.append(
+            f"{a}~{b}: {run:.2f} m of shared wall, under the "
+            f"{fabric.opening_run(a, b):.2f} m {what} needs"
+        )
+        return False
+
+    wall = fabric.graph.wall_between(
+        fabric.spaces[a].axis_polygon, fabric.spaces[b].axis_polygon
+    )
+    if wall is None:
+        report.errors.append(f"{a}~{b}: {run:.2f} m shared but no single wall to host a door")
+        return False
+
+    kind = fabric.door_kind(a, b)
+    leaf = profile.door_leaf_for(kind)
+    taken = on_wall.setdefault(id(wall), [])
+    t = free_slot(wall, taken, leaf, profile.door_frame_for(kind),
+                  _clear_run(fabric, a, b, wall))
+    if t is None:
+        report.errors.append(
+            f"{a}~{b}: no room left on that wall clear of the doors already on it"
+        )
+        return False
+
+    door = Door(
+        wall=wall,
+        t=t,
+        leaf=leaf,
+        swing_into=swing_into,
+        hinge="low",
+        swing_side=_side_of(wall, fabric.spaces[swing_into]),
+    )
+    taken.append(door)
+    report.doors.append(door)
+    return True
+
+
+def _clear_run(fabric, a: str, b: str, wall: WallAxis) -> tuple[float, float]:
+    """The stretch of `wall`, in metres from its `p0`, that faces both rooms'
+    clear floor: a door there stands clear of the walls meeting it, instead of
+    starting at the axis crossing inside their thickness."""
+    axis = 0 if wall.is_horizontal else 1
+    origin = min(wall.p0[axis], wall.p1[axis])
+    ba, bb = fabric.spaces[a].net_polygon.bounds, fabric.spaces[b].net_polygon.bounds
+    low = max(ba[axis], bb[axis], origin) - origin
+    high = min(ba[axis + 2], bb[axis + 2], origin + wall.length) - origin
+    return low, high
+
+
+def door_graph(fabric: FabricPlan, report: OpeningReport) -> dict[str, set[str]]:
+    """Which spaces open onto which, over the openings actually placed."""
+    owners: dict[int, list[str]] = {}
+    for nom, space in fabric.spaces.items():
+        for wall in space.bounding:
+            owners.setdefault(id(wall), []).append(nom)
+    graph: dict[str, set[str]] = {nom: set() for nom in fabric.spaces}
+    for opening in (*report.doors, *report.passages):
+        pair = owners.get(id(opening.wall), [])
+        if len(pair) == 2:
+            a, b = pair
+            graph[a].add(b)
+            graph[b].add(a)
+    return graph
+
+
+def unentered(fabric: FabricPlan, report: OpeningReport) -> list[str]:
+    """Spaces the drawn doors do not reach from the front door, walking only
+    through circulation (and `PASS_THROUGH`): what L5 checks, asked of what L6
+    built. Empty for a plan whose every room can actually be entered."""
+    from planfgen.circulation.reachable import PASS_THROUGH, entry_space
+
+    try:
+        entry = entry_space(fabric).nom
+    except ValueError:
+        return sorted(fabric.spaces)
+    graph = door_graph(fabric, report)
+    kind = {nom: space.kind for nom, space in fabric.spaces.items()}
+    seen, queue = {entry}, [entry]
+    while queue:
+        current = queue.pop()
+        passable = current == entry or kind[current].is_circulation
+        for other in graph[current]:
+            if other in seen:
+                continue
+            if passable or (kind[other], kind[current]) in PASS_THROUGH:
+                seen.add(other)
+                queue.append(other)
+    return sorted(set(fabric.spaces) - seen)
 
 
 def _place_passage(fabric, profile, report: OpeningReport, on_wall, a: str, b: str) -> None:
@@ -183,7 +255,11 @@ def _place_entry(fabric, profile, report: OpeningReport, on_wall) -> None:
 
     wall = max(candidates, key=lambda w: w.length)
     taken = on_wall.setdefault(id(wall), [])
-    t = free_slot(wall, taken, profile.entry_leaf, profile.door_jamb)
+    axis = 0 if wall.is_horizontal else 1
+    origin = min(wall.p0[axis], wall.p1[axis])
+    bounds = entry.net_polygon.bounds
+    run = (max(bounds[axis] - origin, 0.0), min(bounds[axis + 2] - origin, wall.length))
+    t = free_slot(wall, taken, profile.entry_leaf, profile.door_jamb, run)
     if t is None:
         report.errors.append(f"entry door: no clear run on {entry.nom}'s street facade")
         return

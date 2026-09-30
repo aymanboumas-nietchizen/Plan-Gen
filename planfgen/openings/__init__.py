@@ -9,10 +9,12 @@ says may be pierced. Where two circulation spaces meet, the opening is a
 from planfgen.openings.door import ENTRY_LEAF, Door, Passage, free_slot
 from planfgen.openings.place import (
     OpeningReport,
+    door_graph,
     openable_walls,
     place_doors,
     place_openings,
     place_windows,
+    unentered,
 )
 from planfgen.openings.window import (
     DAYLIGHT_KINDS,
@@ -33,6 +35,7 @@ __all__ = [
     "OpeningReport",
     "Passage",
     "Window",
+    "door_graph",
     "free_slot",
     "glazing_owed",
     "needs_daylight",
@@ -42,6 +45,7 @@ __all__ = [
     "place_windows",
     "required_glazing",
     "size_windows",
+    "unentered",
     "width_owed",
     "window_capacity",
     "window_widths",

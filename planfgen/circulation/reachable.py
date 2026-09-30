@@ -155,3 +155,41 @@ def reachable(fabric: FabricPlan) -> ReachabilityReport:
         unreachable=set(fabric.spaces) - set(parent),
         through_room=through_room,
     )
+
+
+def access_tree(
+    fabric: FabricPlan, prefer: set[frozenset[str]] | frozenset = frozenset()
+) -> dict[str, str]:
+    """Every space reached legally, mapped to the space its door opens from.
+
+    The walk `reachable` proves exists, written down so L6 can hang a door on
+    it: breadth-first from the entry over door-capable walls, through
+    circulation only (and `PASS_THROUGH`). Among parents at the same depth a
+    pair in `prefer` (a door the architect asked for) wins, then a circulation
+    space, then the name — so the same plan always gets the same doors. In
+    breadth-first order: a parent comes before its children.
+    """
+    adjacency = fabric.adjacency_graph()
+    entry = entry_space(fabric).nom
+    kind = {nom: space.kind for nom, space in fabric.spaces.items()}
+    tree: dict[str, str] = {}
+    depth = {entry: 0}
+    frontier = [entry]
+    while frontier:
+        options: dict[str, list[tuple[bool, bool, str]]] = {}
+        for current in frontier:
+            passable = current == entry or kind[current].is_circulation
+            for other in adjacency[current]:
+                if other in depth:
+                    continue
+                if passable or (kind[other], kind[current]) in PASS_THROUGH:
+                    options.setdefault(other, []).append((
+                        frozenset((current, other)) not in prefer,
+                        not kind[current].is_circulation,
+                        current,
+                    ))
+        frontier = sorted(options)
+        for other in frontier:
+            tree[other] = min(options[other])[2]
+            depth[other] = depth[tree[other]] + 1
+    return tree

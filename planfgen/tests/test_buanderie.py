@@ -127,6 +127,8 @@ def test_the_door_between_kitchen_and_laundry_is_a_0_83_leaf():
     fabric = laundry_flat()
     graph = ProgrammeGraph([Relation("Cuisine", "Buanderie", RelationType.CONNECTED, 1.0)])
     report = place_doors(fabric, SimpleNamespace(graph=graph), PROFILES["placeholder"])
-    leaves = [d.leaf for d in report.doors if d.swing_into in ("Cuisine", "Buanderie")]
+    wall = fabric.graph.wall_between(fabric.spaces["Cuisine"].axis_polygon,
+                                     fabric.spaces["Buanderie"].axis_polygon)
+    leaves = [d.leaf for d in report.doors if d.wall is wall]
     assert leaves == [pytest.approx(0.83)]
 

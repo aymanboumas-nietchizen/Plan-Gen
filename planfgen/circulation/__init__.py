@@ -9,6 +9,7 @@ facade passes the first and fails the second.
 from planfgen.circulation.reachable import (
     PASS_THROUGH,
     ReachabilityReport,
+    access_tree,
     entry_space,
     reachable,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "PASS_THROUGH",
     "ReachabilityReport",
     "Run",
+    "access_tree",
     "circulation_runs",
     "entry_space",
     "reachable",

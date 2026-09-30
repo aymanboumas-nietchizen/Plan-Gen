@@ -143,8 +143,24 @@ class Passage:
         )
 
 
-def free_slot(wall: WallAxis, taken: list, leaf: float, jamb: float) -> float | None:
-    """A centre `t` on this wall where a leaf fits clear of the doors already on it.
+def free_slot(
+    wall: WallAxis,
+    taken: list,
+    leaf: float,
+    jamb: float,
+    run: tuple[float, float] | None = None,
+) -> float | None:
+    """A centre `t` on this wall where a leaf fits clear of the openings on it.
+
+    `run` is the stretch of the wall, in metres from `p0`, the door may use —
+    the clear floor both rooms share, so the frame stands against the face of
+    a wall meeting this one rather than inside it. Where the module does not
+    fit that stretch the whole axis run is used, as before 2026-09-30.
+
+    Clear means two things: the leaves' quarter-discs do not meet, and — on
+    either face — the openings do not share any stretch of the wall. Two
+    doors cut through the same metre of one wall, from its two faces, are one
+    hole (L6 finding, 2026-09-30).
 
     Walks the wall in jamb-sized steps rather than solving, because a wall
     carries one or two doors and a loop of twenty float comparisons is cheaper
@@ -153,13 +169,23 @@ def free_slot(wall: WallAxis, taken: list, leaf: float, jamb: float) -> float | 
     module = leaf + 2 * jamb
     if wall.length < module:
         return None
-    steps = max(1, int((wall.length - module) / max(jamb, 1e-6)) + 1)
-    for step in range(steps):
-        low = jamb + step * jamb
-        if low + leaf + jamb > wall.length:
+    lo, hi = run if run is not None and run[1] - run[0] >= module - 1e-9 else (0.0, wall.length)
+    step_len = max(jamb, 1e-6)
+    steps = max(1, int((hi - lo - module) / step_len) + 1)
+    for step in range(steps + 1):
+        low = lo + jamb + step * step_len
+        if low + leaf + jamb > hi + 1e-9:
             break
         t = (low + leaf / 2) / wall.length
         probe = Door(wall, t, leaf, "", "low")
-        if not any(probe.clashes_with(other) for other in taken):
+        if not any(probe.clashes_with(other) or _shares_wall(probe, other, jamb)
+                   for other in taken):
             return t
     return None
+
+
+def _shares_wall(door: Door, other, jamb: float) -> bool:
+    """True if the two openings, frames included, overlap along their wall."""
+    a0, a1 = door.span
+    b0, b1 = other.span
+    return a0 - jamb < b1 - 1e-9 and b0 < a1 + jamb - 1e-9
