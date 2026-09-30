@@ -629,12 +629,13 @@ function card(g) {
     return `<div class="card refused">${head}<span class="tag bad">refusé</span></div><div class="thumb none">Aucun plan valide</div><p class="why">${esc(p.refusal)}</p><p class="fine">${esc(p.stats.explain)} · ${fmt(p.elapsed, 1)} s</p></div>`;
   }
   const warn = p.openings.errors.length;
+  const furnished = !p.mobilier || p.mobilier.complete;
   const sel = g.id === state.selected[U().id] ? " selected" : "";
   return `<div class="card${sel}" data-id="${g.id}">${head}<span class="score">${Math.round(p.scores.globale * 100)}</span></div>
     <div class="thumb">${planSVG(p.document, meta.palette, { id: g.id })}</div>
     ${bars(p.scores, true)}
     <div class="facts"><span>${fmt(p.emprise[0])} × ${fmt(p.emprise[1])} m</span><span>${fmt(p.surface_utile, 1)} m²</span><span>écart ≤ ${pct(p.area_error)}</span></div>
-    <div class="flags">${sel ? '<span class="tag sel">retenue</span>' : ""}${p.shrunk ? '<span class="tag bad">pièces réduites</span>' : ""}${warn ? `<span class="tag warn">${warn} réserve${warn > 1 ? "s" : ""}</span>` : '<span class="tag ok">ouvertures OK</span>'}<span class="fine">${fmt(p.elapsed, 1)} s</span></div>
+    <div class="flags">${sel ? '<span class="tag sel">retenue</span>' : ""}${p.shrunk ? '<span class="tag bad">pièces réduites</span>' : ""}${warn ? `<span class="tag warn">${warn} réserve${warn > 1 ? "s" : ""}</span>` : '<span class="tag ok">ouvertures OK</span>'}${furnished ? "" : '<span class="tag warn">mobilier incomplet</span>'}<span class="fine">${fmt(p.elapsed, 1)} s</span></div>
   </div>`;
 }
 
@@ -665,8 +666,10 @@ function renderDetail() {
   $("detail-title").textContent = `${U().label} · graine ${g.seed} — note ${Math.round(p.scores.globale * 100)}/100`;
   $("detail-scores").innerHTML = bars(p.scores, false);
   $("detail-note").textContent = p.note;
-  $("detail-warnings").innerHTML = p.openings.errors.map((e) => `<li>${esc(e)}</li>`).join("")
-    || `<li class="ok">${p.openings.doors} portes et ${p.openings.windows} fenêtres placées, aucune réserve.</li>`;
+  const mob = p.mobilier ? p.mobilier.missing : [];
+  $("detail-warnings").innerHTML = (p.openings.errors.concat(mob).map((e) => `<li>${esc(e)}</li>`).join("")
+    || `<li class="ok">${p.openings.doors} portes et ${p.openings.windows} fenêtres placées, aucune réserve.</li>`)
+    + (p.mobilier && p.mobilier.complete ? `<li class="ok">Mobilier : ${p.mobilier.pieces} éléments placés, chaque pièce est meublée.</li>` : "");
   const rows = p.rooms.map((r) => `
     <tr><td><i class="swatch" style="background:${meta.palette[r.kind] || "#ccc"}"></i>${esc(r.nom)}</td>
     <td>${esc(meta.rooms[r.kind] || r.kind)}</td>

@@ -48,11 +48,27 @@ class OpeningReport:
 
 
 def _side_of(wall: WallAxis, space: Space) -> int:
-    """+1 if the space lies on the wall's left normal, -1 if on its right."""
-    (x0, y0), (x1, y1) = wall.p0, wall.p1
+    """+1 if the space lies on the wall's +y side (horizontal wall) or +x side
+    (vertical wall), -1 otherwise — the convention `Door.clearance_box`, the DXF
+    and the web drawing all read `swing_side` in.
+
+    It used to be the wall's left normal, which is +y for a horizontal wall but
+    -x for a vertical one (p0 is the lower end): every door on a vertical wall
+    swung into the room it did not name. Found by the L7 layout (S31).
+    """
+    x0, y0 = wall.p0
     cx, cy = space.net_polygon.centroid.x, space.net_polygon.centroid.y
-    cross = (x1 - x0) * (cy - y0) - (y1 - y0) * (cx - x0)
-    return 1 if cross >= 0 else -1
+    if wall.is_horizontal:
+        return 1 if cy >= y0 else -1
+    return 1 if cx >= x0 else -1
+
+
+def _swing_target(fabric: FabricPlan, a: str, b: str) -> str:
+    """The space a door's leaf opens into: the room, never the corridor or hall
+    it is entered from. Between two rooms, `b` as before."""
+    if fabric.spaces[b].kind.is_circulation and not fabric.spaces[a].kind.is_circulation:
+        return a
+    return b
 
 
 def place_doors(fabric: FabricPlan, topology, profile: RegulationProfile) -> OpeningReport:
@@ -88,7 +104,10 @@ def place_doors(fabric: FabricPlan, topology, profile: RegulationProfile) -> Ope
         if frozenset((a, b)) in joined:
             continue
 
-        if _hang(fabric, profile, report, on_wall, a, b, swing_into=b):
+        # The leaf opens into the room, never into the corridor or hall it is
+        # entered from (`_swing_target`, S31 layout fix).
+        if _hang(fabric, profile, report, on_wall, a, b,
+                 swing_into=_swing_target(fabric, a, b)):
             joined.add(frozenset((a, b)))
 
     # Every room its door. Relations say which doors the architect wants;

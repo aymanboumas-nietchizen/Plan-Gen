@@ -1406,3 +1406,17 @@ Measured: daylight: presets 36->16/36, +WC 48->18/48, programmes 50->38/72 — a
           generates). Doors: plans with a room not entered over drawn doors 90/90 (base), 20/20 -> 0/20.
 Parked:   corridor-ends-at-last-door rule on branch v2-corridor-end: presets 3/36, +WC 0/48. Slicing grammar needs an
           edge band / cap over the band alone. Tests 465 pass, 5 skip, 7 xfail (strict: lost presets).
+
+---
+
+## S32 — Furnished plans: L7 layout, family keys, drawn everywhere (planfgen-engine)  2026-09-30
+
+Built:    `habitability/layout.py` (`furnish`: pieces against walls, door squares both faces kept clear, nothing
+          above the allege before a window, 0.60 m walk door->every piece, bounded DFS, numpy grid; FAMILIES = the
+          Revit key vocabulary); `document/furniture.py` (one symbol set); SVG (+door swings), DXF MOBILIER/PLACARD/
+          EQUIPEMENT, `to_gh_json["furniture"]` (key, w/d/h, insertion, rotation, host room), web plan.js. L6 fix:
+          vertical-wall doors swung into the wrong room; a door off a corridor now swings into the room.
+Measured: `tools/probe_furniture.py`, 6 seeds x 3 profiles, F3/F4/DEMO/F3+WC/F4+WC/F3tight: 108/108 furnish fully,
+          45-100 ms/plan. Not a gate (in-loop FURNITURE_GATE already guarantees it): check the retained plan only.
+Found:    98/108 plans have a room L6 gives NO door (reachability walks door-capable contacts; L6 doors relations only).
+Tests:    test_layout 16 pass; suite 463 pass, 5 skip.
