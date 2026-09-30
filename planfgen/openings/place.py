@@ -20,7 +20,8 @@ from planfgen.brief.regulation import RegulationProfile
 from planfgen.fabric.axis import WallAxis, WallKind
 from planfgen.fabric.plan import FabricPlan, Space
 from planfgen.circulation.reachable import access_tree
-from planfgen.openings.door import Door, Passage, free_slot
+from planfgen.circulation.shape import circulation_runs, corridor_axis, door_interval, door_run
+from planfgen.openings.door import Door, Passage, _shares_wall, free_slot
 from planfgen.openings.window import Window, needs_daylight, required_glazing, size_windows
 from planfgen.topology.relations import RelationType
 
@@ -72,6 +73,10 @@ def place_doors(fabric: FabricPlan, topology, profile: RegulationProfile) -> Ope
     report = OpeningReport()
     on_wall: dict[int, list] = {}
     joined: set[frozenset[str]] = set()
+    try:
+        runs = {run.nom: run for run in circulation_runs(fabric).runs}
+    except (ValueError, KeyError):
+        runs = {}
 
     noms = sorted(fabric.spaces)
     for i, a in enumerate(noms):
@@ -88,7 +93,7 @@ def place_doors(fabric: FabricPlan, topology, profile: RegulationProfile) -> Ope
         if frozenset((a, b)) in joined:
             continue
 
-        if _hang(fabric, profile, report, on_wall, a, b, swing_into=b):
+        if _hang(fabric, profile, report, on_wall, a, b, swing_into=b, runs=runs):
             joined.add(frozenset((a, b)))
 
     # Every room its door. Relations say which doors the architect wants;
@@ -101,11 +106,12 @@ def place_doors(fabric: FabricPlan, topology, profile: RegulationProfile) -> Ope
     missing = set(unentered(fabric, report))
     for room, parent in access_tree(fabric, joined).items():
         if room in missing and room in unentered(fabric, report):
-            _hang(fabric, profile, report, on_wall, parent, room, swing_into=room)
+            _hang(fabric, profile, report, on_wall, parent, room, swing_into=room, runs=runs)
     return report
 
 
-def _hang(fabric, profile, report: OpeningReport, on_wall, a: str, b: str, swing_into: str) -> bool:
+def _hang(fabric, profile, report: OpeningReport, on_wall, a: str, b: str, swing_into: str,
+          runs: dict | None = None) -> bool:
     """One door between `a` and `b`, or an error saying why not."""
     run = fabric.shared_wall_length(a, b)
     if not fabric.door_capable(a, b):
@@ -126,8 +132,10 @@ def _hang(fabric, profile, report: OpeningReport, on_wall, a: str, b: str, swing
     kind = fabric.door_kind(a, b)
     leaf = profile.door_leaf_for(kind)
     taken = on_wall.setdefault(id(wall), [])
-    t = free_slot(wall, taken, leaf, profile.door_frame_for(kind),
-                  _clear_run(fabric, a, b, wall))
+    t = _near_origin(fabric, runs or {}, a, b, wall, taken, leaf, profile.door_frame_for(kind))
+    if t is None:
+        t = free_slot(wall, taken, leaf, profile.door_frame_for(kind),
+                      _clear_run(fabric, a, b, wall))
     if t is None:
         report.errors.append(
             f"{a}~{b}: no room left on that wall clear of the doors already on it"
@@ -198,6 +206,31 @@ def unentered(fabric: FabricPlan, report: OpeningReport) -> list[str]:
                 seen.add(other)
                 queue.append(other)
     return sorted(set(fabric.spaces) - seen)
+
+
+def _near_origin(fabric, runs, a: str, b: str, wall: WallAxis, taken, leaf: float, frame: float):
+    """The door off a corridor goes on its shared run as near the corridor's
+    origin as it will go — exactly where `circulation.shape` assumes it when it
+    measures how far the corridor overruns its last door. None if neither room
+    is a corridor, the wall runs across its end, or that slot is taken."""
+    band = a if a in runs else b if b in runs else None
+    if band is None or runs[band].origin is None:
+        return None
+    axis = corridor_axis(fabric.spaces[band])
+    lo, hi = sorted((wall.p0[axis], wall.p1[axis]))
+    if hi - lo <= 1e-9:
+        return None                                 # across the end: any slot will do
+    other = b if band == a else a
+    module = leaf + 2 * frame
+    start, _ = door_interval(door_run(fabric, band, other, wall, axis, module), module,
+                             runs[band].origin)
+    t = (start - lo + frame + leaf / 2) / wall.length
+    if not 0.0 <= t <= 1.0:
+        return None
+    probe = Door(wall, t, leaf, "", "low")
+    if any(probe.clashes_with(o) or _shares_wall(probe, o, frame) for o in taken):
+        return None
+    return t
 
 
 def _place_passage(fabric, profile, report: OpeningReport, on_wall, a: str, b: str) -> None:

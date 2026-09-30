@@ -42,10 +42,12 @@ from planfgen.partition.tree import BAND_WALL, BandCut, Cut, Direction, Leaf, Sl
 
 SIDES = ("left", "right", "bottom", "top")
 
-#: What runs along a region's side: a corridor band, the street, the hub, and
-#: facade a window may pierce (the daylight gate, decret ART. 7).
-BAND, STREET, HALL, LIGHT = 1, 2, 4, 8
+#: What runs along a region's side: a corridor band, the street, the hub,
+#: facade a window may pierce (the daylight gate, decret ART. 7), and the
+#: unit's exterior — where a corridor may not end, nothing being there to open.
+BAND, STREET, HALL, LIGHT, EXT = 1, 2, 4, 8, 16
 CIRC = BAND | HALL
+KEEP = CIRC | LIGHT | EXT
 
 #: `oblig`: none, else 0-3 the hub must TOUCH that side, 4-7 it must SPAN it.
 FREE = -1
@@ -206,10 +208,12 @@ class Constructor:
         x, y, w, h = self.rect
         state = ((1 << self.n) - 1, x, y, w, h, t, flags, budget, FREE)
         try:
-            node = self._find(state, rng)
+            found = self._find(state, rng)
         except _OutOfCalls:
             return None
-        return None if node is None else SlicingTree(node)
+        if found is None or found[1] or found[2]:
+            return None
+        return SlicingTree(found[0])
 
     def proven_empty(self, budget: int) -> bool:
         """True once a find at `budget` has exhausted the whole search."""
@@ -219,9 +223,10 @@ class Constructor:
         return self._key(((1 << self.n) - 1, x, y, w, h, t, flags, budget, FREE)) in self.dead
 
     def _outer_flags(self) -> tuple[int, ...]:
-        """What runs along each side of the whole unit: the street, and light."""
+        """What runs along each side of the whole unit: the street, light, and
+        the exterior itself."""
         return tuple(
-            (STREET if i == self.street else 0) | (LIGHT if self.open[i] else 0)
+            EXT | (STREET if i == self.street else 0) | (LIGHT if self.open[i] else 0)
             for i in range(4)
         )
 
@@ -240,6 +245,28 @@ class Constructor:
         return (mask, round(w / QUANTUM), round(h / QUANTUM), t, flags, budget, oblig)
 
     def _leaf_ok(self, i: int, w: float, h: float, t, flags, oblig: int) -> bool:
+        """The room furnishes, is lit, and is served: off a band or the hub,
+        or — pending, settled where its region meets its sibling — through
+        the end of a corridor on a side that is not the exterior."""
+        return self._leaf_fit(i, w, h, t, flags, oblig) and (
+            i == self.hub or self._served(i, w, h, flags) or bool(self._pending(i, w, h, flags)))
+
+    def _served(self, i: int, w: float, h: float, flags) -> bool:
+        band, hall = self.dm_band[i] - _EPS, self.dm_hall[i] - _EPS
+        for side, f in enumerate(flags):
+            run = h if side < 2 else w
+            if (f & BAND and run >= band) or (f & HALL and run >= hall):
+                return True
+        return False
+
+    def _pending(self, i: int, w: float, h: float, flags) -> tuple[int, ...]:
+        """Interior sides a corridor's end could serve this room through."""
+        need = self.dm_band[i] - _EPS
+        if need > self.clear + self.t_band:
+            return ()
+        return tuple(s for s in range(4) if not flags[s] & EXT and (h if s < 2 else w) >= need)
+
+    def _leaf_fit(self, i: int, w: float, h: float, t, flags, oblig: int) -> bool:
         nw = w - (t[0] + t[1]) / 2
         nh = h - (t[2] + t[3]) / 2
         short, long = (nw, nh) if nw <= nh else (nh, nw)
@@ -261,12 +288,7 @@ class Constructor:
             if oblig == FREE or oblig >= 4:
                 return True
             return (h if oblig < 2 else w) >= self.hub_meets - _EPS
-        band, hall = self.dm_band[i] - _EPS, self.dm_hall[i] - _EPS
-        for side, f in enumerate(flags):
-            run = h if side < 2 else w
-            if (f & BAND and run >= band) or (f & HALL and run >= hall):
-                return True
-        return False
+        return True
 
     def _plausible(self, mask: int, w: float, h: float, t, flags, budget: int, oblig: int) -> bool:
         nw = w - (t[0] + t[1]) / 2
@@ -289,7 +311,7 @@ class Constructor:
             if oblig != FREE:
                 return False
             served = [s for s in range(4) if flags[s] & CIRC]
-            if not served:
+            if not served and all(f & EXT for f in flags):
                 return False
             if budget == 0 and len(served) == 1:
                 depth = nw if served[0] < 2 else nh      # every room a slab across
@@ -351,12 +373,27 @@ class Constructor:
                 offset = free * share + (t[a0] + tw) / 2
                 variants = []
                 if band:
-                    ends = flags[e0] | flags[e1]
-                    if ((ends & BAND and gap >= self.jn - _EPS)
-                            or (ends & HALL and gap >= self.hub_meets - _EPS)):
+                    # A corridor ends at its last door (the architect,
+                    # 2026-09-29): each end meets circulation, or a room
+                    # across it whose door fits the end (CAP). One end at
+                    # least is where it is entered, unless the hub meets it
+                    # from the side — then both ends are capped.
+                    joins = [bool((flags[e] & BAND and gap >= self.jn - _EPS)
+                                  or (flags[e] & HALL and gap >= self.hub_meets - _EPS))
+                             for e in (e0, e1)]
+                    closable = all(j or not flags[e] & EXT for j, e in zip(joins, (e0, e1)))
+                    if closable and any(joins):
                         variants.append((BAND, BAND, inherited))
-                    elif o_side is None and (h_low or h_high):
+                    elif (o_side is None and (h_low or h_high)
+                          and all(not flags[e] & EXT or flags[e] & STREET for e in (e0, e1))):
+                        # the hub meets it from the side; an end on the street
+                        # is where the hub stands, and so where it is entered
                         variants.append((BAND, BAND, (lo_s, FREE) if h_low else (FREE, hi_s)))
+                    # the ends left open: a room across must take their door
+                    lo_at = (x if d is Direction.V else y) + free * share + (t[a0] + tw) / 2
+                    opens = tuple((e, lo_at, lo_at + gap, gap)
+                                  for j, e in zip(joins, (e0, e1))
+                                  if not j and not flags[e] & EXT)
                 else:
                     if high_is_hub:
                         variants.append((HALL, 0, inherited))
@@ -364,6 +401,7 @@ class Constructor:
                         variants.append((0, HALL, inherited))
                     else:
                         variants.append((0, 0, inherited))
+
                         if o_side is None and h_high:
                             variants.append((HALL, 0, (FREE, 4 + hi_s)))
                         elif o_side is None and h_low:
@@ -384,14 +422,15 @@ class Constructor:
                     fh = list(flags); fh[hi_s] = f_hi
                     if self.hub is not None:     # the street matters only to the hub
                         if not h_low:
-                            fl = [f & (CIRC | LIGHT) for f in fl]
+                            fl = [f & KEEP for f in fl]
                         if not h_high:
-                            fh = [f & (CIRC | LIGHT) for f in fh]
+                            fh = [f & KEEP for f in fh]
                     fl, fh = tuple(fl), tuple(fh)
                     for b_low in range(max(0, rest - (n_high - 1)), min(rest, n_low - 1) + 1):
                         out.append((d, band,
                                     (low, *r_low, t_low, fl, b_low, ob_low),
-                                    (high, *r_high, t_high, fh, rest - b_low, ob_high)))
+                                    (high, *r_high, t_high, fh, rest - b_low, ob_high),
+                                    opens if band else ()))
         rng.shuffle(out)
         return out
 
@@ -420,11 +459,31 @@ class Constructor:
             yield sub
 
     def _find(self, state, rng: random.Random):
+        """(node, ends, pending, caps) for a tree of `state`, or None.
+
+        `ends` are corridor ends left open on the region's sides, (side, lo,
+        hi, width); `pending` rooms served only through such an end, (room,
+        ((side, lo, hi), ...), module); `caps` rooms along the sides that
+        could take a door at an end, (side, lo, hi, module). Where two
+        regions meet, every open end must find a room across it whose door
+        fits, and every pending room an end within its wall — the corridor
+        ENDS at a door (the architect, 2026-09-29).
+        """
         mask, x, y, w, h, t, flags, budget, oblig = state
         if mask & (mask - 1) == 0:
-            if budget == 0 and self._leaf_ok(mask.bit_length() - 1, w, h, t, flags, oblig):
-                return self.leaves[mask.bit_length() - 1]
-            return None
+            i = mask.bit_length() - 1
+            if budget or not self._leaf_fit(i, w, h, t, flags, oblig):
+                return None
+            span = ((y, y + h), (y, y + h), (x, x + w), (x, x + w))
+            caps = () if i == self.hub else tuple(
+                (s, *span[s], self.dm_band[i]) for s in range(4) if not flags[s] & EXT)
+            if i == self.hub or self._served(i, w, h, flags):
+                return self.leaves[i], (), (), caps
+            sides = self._pending(i, w, h, flags)
+            if not sides:
+                return None
+            return self.leaves[i], (), ((i, tuple((s, *span[s]) for s in sides),
+                                         self.dm_band[i]),), caps
         key = self._key(state)
         if key in self.dead:
             return None
@@ -438,7 +497,7 @@ class Constructor:
             self.dead.add(key)
             return None
         for low in self._submasks(mask, rng):
-            for d, band, s_low, s_high in self._options(state, low, mask ^ low, rng):
+            for d, band, s_low, s_high, opens in self._options(state, low, mask ^ low, rng):
                 if not (self._check(s_high) and self._check(s_low)):
                     continue
                 a = self._find(s_low, rng)
@@ -447,12 +506,52 @@ class Constructor:
                 b = self._find(s_high, rng)
                 if b is None:
                     continue
-                node = BandCut(d, (a, b)) if band else Cut(d, False, (a, b))
-                self._alive[key] = node
-                return node
+                lo_s, hi_s = (1, 0) if d is Direction.V else (3, 2)
+                met = _meet(a, b, lo_s, hi_s, band)
+                if met is None:
+                    continue
+                ends, pending, caps = met
+                node = BandCut(d, (a[0], b[0])) if band else Cut(d, False, (a[0], b[0]))
+                found = (node, ends + opens, pending, caps)
+                self._alive[key] = found
+                return found
         self.dead.add(key)
         return None
 
+
+def _meet(a, b, lo_s: int, hi_s: int, band: bool):
+    """Join two siblings' open ends, pending rooms and caps across their cut.
+
+    Across a band nothing meets (its sides are served by it, and an end on
+    them would have joined it). Across a plain cut, each open end on the cut
+    needs a cap across it — a room covering it whose door fits its width —
+    and each pending room loses that side unless an end across falls within
+    it; a pending room with no side left is unserved. None if anything fails.
+    """
+    ends: list = []
+    pending: list = []
+    for mine, other, side, facing in ((a, b, lo_s, hi_s), (b, a, hi_s, lo_s)):
+        for end in mine[1]:
+            if end[0] != side:
+                ends.append(end)
+            elif band or not any(
+                c[0] == facing and c[1] <= end[1] + _EPS and c[2] >= end[2] - _EPS
+                and c[3] <= end[3] + _EPS for c in other[3]
+            ):
+                return None
+        for room, sides, module in mine[2]:
+            here = [sd for sd in sides if sd[0] == side]
+            if here and not band and any(
+                e[0] == facing and e[1] >= sd[1] - _EPS and e[2] <= sd[2] + _EPS
+                and e[3] >= module - _EPS for e in other[1] for sd in here
+            ):
+                continue
+            rest = tuple(sd for sd in sides if sd[0] != side)
+            if not rest:
+                return None
+            pending.append((room, rest, module))
+    caps = tuple(c for c in a[3] if c[0] != lo_s) + tuple(c for c in b[3] if c[0] != hi_s)
+    return tuple(ends), tuple(pending), caps
 
 def construct(
     brief: Brief,

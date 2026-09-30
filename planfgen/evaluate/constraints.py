@@ -61,6 +61,20 @@ AREA_TOLERANCE = 0.05
 COVERAGE_TOLERANCE = 1e-9
 
 
+#: How far a corridor may run past its last door and still not be a dead end,
+#: in metres. **The architect's decision of 2026-09-29**: a corridor ends at its
+#: last door ("un cul de sac, c'est un espace gâché qu'on peut ajouter à une
+#: chambre ou à la SDB"). Not zero, because the door is measured on the wall
+#: axes (`circulation.shape.door_interval`) and the corridor on its clear floor:
+#: a door flush with the end still reads a few centimetres short of it, by half
+#: the end wall and the frame. 0.10 m — one jamb — covers that and no floor
+#: anyone could use. A judgement constant, like `AREA_TOLERANCE`, not a
+#: regulation value. Until then the allowance was `corridor_clear` (0.80-1.20 m
+#: of "turning space"), and a room running alongside to the facade counted as
+#: serving the corridor over its whole run, wherever its door was.
+STUB_ALLOWANCE = 0.10
+
+
 class Gate(Protocol):
     """Something a candidate passes or fails."""
 
@@ -203,18 +217,19 @@ def _daylight_ok(plan, brief: Brief) -> bool:
 
 
 def _circulation_ok(plan, brief: Brief) -> bool:
-    """No corridor may run past its last door by more than its own width.
+    """No corridor may run past its last door (`STUB_ALLOWANCE`).
 
-    A little overrun is turning space. More than that is corridor leading
-    nowhere, and it is the one circulation fault that is not a matter of
-    degree — the metres are simply wasted. How *much* circulation a plan spends
-    is a judgement call and stays in `metrics.py`.
+    Measured from where the corridor is entered, each door as near that origin
+    as its room's shared run allows (`circulation.shape`). Corridor past the
+    last door leads nowhere, and it is the one circulation fault that is not a
+    matter of degree — the metres belong to a room. How *much* circulation a
+    plan spends is a judgement call and stays in `metrics.py`.
     """
     try:
         report = circulation_runs(fabric_of(plan, brief))
     except (ValueError, KeyError):
         return False
-    return not report.dead_ends(brief.profile.corridor_clear)
+    return not report.dead_ends(STUB_ALLOWANCE)
 
 
 def _reachable_ok(plan, brief: Brief) -> bool:
@@ -287,8 +302,8 @@ def violation(plan, brief: Brief) -> float:
 
     Staged, so the walk fixes geometry before paying for the wall graph: the
     cheap gates (area, coverage, minimum area, furniture, daylight) are measured first,
-    and only a plan that clears all of them is built into a fabric and counted
-    for dead ends and unreachable rooms.
+    and only a plan that clears all of them is built into a fabric and measured
+    for metres of dead-end corridor and counted for unreachable rooms.
     """
     profile = brief.profile
     programme = brief.programme
@@ -313,7 +328,7 @@ def violation(plan, brief: Brief) -> float:
     except (ValueError, KeyError):
         return CHEAP_STAGE
     return float(
-        len(runs.dead_ends(profile.corridor_clear))
+        runs.overrun(STUB_ALLOWANCE)                # metres of dead end
         + len(report.unreachable)
         + len(report.through_room)
     )
